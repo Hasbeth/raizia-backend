@@ -13,8 +13,16 @@ leer archivos de entorno ni acceder a la base original.
 - `support/register.mjs` y `support/db-stub.mjs`: resolución de TypeScript y bloqueo de SQLite.
 - `support/route-harness.mjs`: ejecuta los handlers reales con repositorio y autenticación simulados; rechaza dependencias no declaradas.
 
-Resultado de `npm test`: **160 pruebas aprobadas, 0 fallidas, 0 omitidas y 0 TODO**.
-Son las 150 pruebas de lógica existentes y 10 nuevas de las rutas HTTP.
+Se mantienen las **160 pruebas originales**, incluidas las 10 de rutas HTTP.
+La ampliación de biblioteca añade:
+
+- `biblioteca.test.mjs`: encabezados observados, excepciones, conservación de hechos/visor, dedupe y estimación Postgres.
+- `embeddings-core.test.mjs`: lotes, cuota móvil por textos, 429 diario/temporal, normalización/BLOB/pgvector y cola con HTTP/reloj simulados.
+- `biblioteca-integration.test.mjs`: proceso hijo con SQLite real **exclusivamente de prueba**, generado bajo `raizia-backend/data/.test-biblioteca-*` y eliminado al terminar. Verifica fichas, errores de extracción, visor, reporte y conservación de vectores por hash tras cambiar IDs. Nunca abre la base original.
+
+Las pruebas no leen `.env.local` ni usan red; el bloqueo de SQLite se mantiene
+para las pruebas de lógica pura. La integración solo permite SQLite en su
+proceso hijo aislado, sin heredar el registro de stubs.
 
 La batería adicional de administración permanece junto a sus handlers:
 

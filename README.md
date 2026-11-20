@@ -70,6 +70,63 @@ Se conservan los demás scripts en `scripts/`. Revisa sus requisitos y rutas ant
 
 ## Estructura y comprobaciones
 
+## Biblioteca nueva y embeddings
+
+La fase 1 construye una biblioteca intermedia en `data/staging/`. Requiere Node
+26 y las dependencias locales; no necesita un servidor Next.js ni Supabase.
+Los dos primeros comandos funcionan sin red y no leen `.env.local`.
+
+```powershell
+npm run construir
+npm run medir
+npm run embeddings -- --limite 30
+```
+
+En PowerShell con scripts deshabilitados usa `npm.cmd`. Para procesar todos los
+pendientes, ejecuta `npm run embeddings` sin `--limite`.
+
+- **`construir`** lee `../raizia/data/raizia.db` con `{ readOnly: true }` y los
+  archivos originales de `../raizia/data/files/`. Copia las 19 columnas de cada
+  ficha y las categorías, reextrae y fragmenta con `src/lib/ingest.ts`, y crea
+  `biblioteca.db`, `textos/<id>.json`, `construccion.json` y
+  `frecuencias-encabezados.json`. Los errores de extracción se registran sin
+  detener el resto; una ficha fallida tiene JSON con `chunks: []`. Comprueba el
+  SHA-256 de la base original antes/después sin escribir en ella ni en su WAL.
+  Se puede repetir: conserva vectores existentes por `content_hash`, aunque
+  cambien los IDs; el staging anterior sigue disponible hasta publicar el nuevo.
+- **`medir`** imprime y guarda `data/staging/informe.md` y `medicion.json`, con
+  fragmentos viejos/reextraídos/indexados por colección, exclusiones, fallos,
+  bytes reales de texto y Storage, y estimaciones Postgres para 384 y 256
+  dimensiones frente a 500 MB. Se supone GIN de expresión español, sin HNSW;
+  también se muestra el costo opcional de una columna tsvector almacenada.
+- **`embeddings`** es el único comando que utiliza red. Lee `GEMINI_API_KEY` de
+  `.env.local` o del entorno sin imprimirla, usa
+  `models/gemini-embedding-2`, `RETRIEVAL_DOCUMENT`, el título y 384 dimensiones.
+  `EMBED_DIMS` permite elegir otra dimensionalidad (por ejemplo 256);
+  `EMBED_BATCH` permite lotes de 20–50 textos (predeterminado 30).
+  Cambiar dimensiones vuelve a poner los vectores incompatibles en la cola.
+  Procesa primero la colección principal y después las masivas por peso.
+  Limita a 90 **textos**, no lotes, por minuto, persiste el historial de cuota
+  entre ejecuciones y respeta `RetryInfo.retryDelay` en un 429. Una cuota diaria
+  agotada deja el avance guardado, indica «cuota diaria agotada, reintentar
+  mañana» y termina con código 0. Otros errores persistentes terminan con 1.
+
+Cada lote de vectores normalizados L2 se confirma en una transacción SQLite.
+Ctrl-C conserva todos los lotes confirmados; al repetir se seleccionan solo
+los `chunks.indexed=1` que aún no tienen un vector del modelo y dimensiones
+elegidos. `data/staging/progreso.json` contiene hechos/total, porcentaje, ritmo,
+ETA de toda la biblioteca y de la ejecución limitada, fase y último error.
+Con `--limite 0` no se envían solicitudes. No ejecutes los tres comandos a la
+vez: comparten un bloqueo de escritura.
+
+Las [reglas, evidencia y mapeo de esquema](scripts/REGLAS-BIBLIOTECA.md) explican
+qué se indexa. El visor conserva **todas** las secciones y los duplicados. En
+la fase 2 se importarán a Postgres solo los fragmentos `indexed=1`, junto con
+sus vectores; los JSON y originales irán a Storage. Esta fase no migra la API
+ni sube archivos. `data/` ya está ignorada y requiere respaldo por separado.
+
+## Estructura y comprobaciones
+
 ```text
 src/app/api/   rutas públicas, chat, herramientas y administración
 src/app/route.ts   información de la API
@@ -79,6 +136,6 @@ tests/         pruebas aisladas, sin acceso a la base real
 data/          base SQLite y archivos originales
 ```
 
-Ejecuta `npm test`, `npx tsc --noEmit`, `npx eslint` y `npm run build`. Se mantienen las 150 pruebas originales y se añaden 10 pruebas de las rutas públicas y de sesión: 160 en total.
+Ejecuta `npm test`, `npx tsc --noEmit`, `npx eslint` y `npm run build`. Se mantienen las 160 pruebas originales y se añaden pruebas de reglas, deduplicación, estimación, embeddings y reconstrucción con SQLite aislado. Las pruebas de embeddings simulan HTTP y el reloj; no llaman a Gemini ni leen claves.
 
 `data/` **no se versiona**; necesita un respaldo aparte, junto con los archivos de `data/files/`. Tampoco se versionan `node_modules/`, `.next/` ni `.env*`, salvo `.env.example`.

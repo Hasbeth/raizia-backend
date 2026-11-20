@@ -111,10 +111,10 @@ const NUMBERED_SECTION = /^(?:T[ÍI]TULO|CAP[ÍI]TULO|SECCI[ÓO]N|LIBRO|PARTE)\b
 const JUDICIAL_SECTION =
   /^(?:[IVX]+\.?\s*|\d+\.?\s*)?(ANTECEDENTES|CONSIDERACIONES|FUNDAMENTOS|DECISI[ÓO]N|RESUELVE|HECHOS|S[ÍI]NTESIS|SALVAMENTO|ACLARACI[ÓO]N|COMPETENCIA|PRUEBAS|CASO CONCRETO|PROBLEMA JUR[ÍI]DICO)\b/;
 
-export function chunkText(text: string): Chunk[] {
+export function chunkText(text: string, options: { judicial?: boolean } = {}): Chunk[] {
   // En sentencias y autos los artículos que aparecen son citas de otras normas:
   // solo se usan como encabezado las partes propias de la providencia.
-  const judicial = /\b(?:Sentencia|Auto)\s+(?:No\.?\s*)?(?:SU|T|C|A)?[-\s]?\d+/i.test(text.slice(0, 500));
+  const judicial = options.judicial ?? /\b(?:Sentencia|Auto)\s+(?:No\.?\s*)?(?:SU|T|C|A)?[-\s]?\d+/i.test(text.slice(0, 500));
   // Asegura que cada artículo comience en su propia línea (útil en PDF).
   const prepared = text.replace(/[ \t]+(?=ART[ÍI]CULO\s+\d+[\w-]*\s*[°ºo]?\s*\.)/g, "\n");
   const paras = prepared
