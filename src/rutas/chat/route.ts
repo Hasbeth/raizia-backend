@@ -30,15 +30,24 @@ export async function POST(req: Request) {
     const encoder = new TextEncoder();
     const stream = new ReadableStream<Uint8Array>({
         async start(controller) {
-            const send = (e: ChatEvent) => controller.enqueue(encoder.encode(JSON.stringify(e) + "\n"));
+            let subtemas: string[] = [];
+            const send = (e: ChatEvent) => controller.enqueue(encoder.encode(JSON.stringify(e.type === "meta" ? { ...e, subtemas } : e) + "\n"));
             try {
                 // Saludos y charla breve no necesitan buscar; el resto siempre pasa por la biblioteca.
                 const smallTalk = isSmallTalk(message);
-                const { topics, hits, sources } = smallTalk
-                    ? { topics: [], hits: [], sources: [] }
-                    : await retrieve(message, previousUser, profile);
+                const retrieval = smallTalk
+                    ? { topics: [], hits: [], sources: [], subtemas: [], reformulation: null, clarification: null }
+                    : await retrieve(message, previousUser, profile, history, { signal: req.signal });
+                const { topics, hits, sources, reformulation, clarification } = retrieval;
+                subtemas = retrieval.subtemas;
                 const topicList = topics.map((t) => ({ id: t.id, name: t.name }));
                 const tool = smallTalk ? undefined : suggestTool(message) || undefined;
+                if (clarification) {
+                    send({ type: "meta", mode: "conversacion", topics: topicList, sources: [] });
+                    send({ type: "token", text: clarification });
+                    send({ type: "done" });
+                    return;
+                }
                 const status = await ollamaStatus();
                 if (!hits.length) {
                     // Sin fuentes el modelo solo conversa: saluda, aclara o pide más detalles.
@@ -88,7 +97,7 @@ export async function POST(req: Request) {
                 }
                 send({ type: "meta", mode: "ia", topics: topicList, sources, model: status.model, tool });
                 try {
-                    for await (const text of generateAnswer(status.model, message, hits, history, req.signal, profile)) {
+                    for await (const text of generateAnswer(status.model, message, hits, history, req.signal, profile, undefined, reformulation)) {
                         send({ type: "token", text });
                     }
                 }

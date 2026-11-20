@@ -1,0 +1,420 @@
+{
+  "descripcion": "30 preguntas de prueba para comparar la búsqueda actual (palabras) con la híbrida (palabras + embeddings). 'esperados' son ids de documentos de la colección principal que deberían aparecer entre los primeros resultados (basta con uno). Tipos: 'cotidiana' = lenguaje cotidiano o español no nativo; 'exacta' = referencia precisa a una norma o sentencia. Copia ampliada dentro del backend: 10 preguntas de beneficios. No se modifica el respaldo. Acierto = al menos un documento esperado entre seis fragmentos (sin deduplicar documentos).",
+  "preguntas": [
+    {
+      "id": 1,
+      "tipo": "cotidiana",
+      "pregunta": "una empresa quiere sacar petroleo en nuestro territorio y no nos preguntaron nada",
+      "esperados": [
+        24,
+        37,
+        36,
+        41
+      ]
+    },
+    {
+      "id": 2,
+      "tipo": "cotidiana",
+      "pregunta": "nos sacaron de la tierra donde vivian los abuelos por la violencia",
+      "esperados": [
+        1526,
+        1514
+      ]
+    },
+    {
+      "id": 3,
+      "tipo": "cotidiana",
+      "pregunta": "mande carta a la alcaldia y no me contestan hace dos meses",
+      "esperados": [
+        25,
+        50
+      ]
+    },
+    {
+      "id": 4,
+      "tipo": "cotidiana",
+      "pregunta": "el hospital no quiere atender a mi hijo porque no tiene papeles",
+      "esperados": [
+        35,
+        33,
+        26
+      ]
+    },
+    {
+      "id": 5,
+      "tipo": "cotidiana",
+      "pregunta": "en la escuela no enseñan nuestra lengua a los niños",
+      "esperados": [
+        34,
+        32,
+        1509
+      ]
+    },
+    {
+      "id": 6,
+      "tipo": "cotidiana",
+      "pregunta": "el cabildo castigo a un comunero, puede el juez de afuera meterse",
+      "esperados": [
+        39,
+        40
+      ]
+    },
+    {
+      "id": 7,
+      "tipo": "cotidiana",
+      "pregunta": "como hacemos para que el gobierno nos reconozca el resguardo y nos de titulo de la tierra",
+      "esperados": [
+        31,
+        1513,
+        30
+      ]
+    },
+    {
+      "id": 8,
+      "tipo": "cotidiana",
+      "pregunta": "el rio esta contaminado por la mineria y los peces se murieron",
+      "esperados": [
+        42,
+        28,
+        1495
+      ]
+    },
+    {
+      "id": 9,
+      "tipo": "cotidiana",
+      "pregunta": "mi esposo me pega y en la comunidad nadie hace nada",
+      "esperados": [
+        1515,
+        1523
+      ]
+    },
+    {
+      "id": 10,
+      "tipo": "cotidiana",
+      "pregunta": "nos insultaron en el bus por ser indigenas",
+      "esperados": [
+        1516
+      ]
+    },
+    {
+      "id": 11,
+      "tipo": "cotidiana",
+      "pregunta": "la alcaldia no cumple lo que dice la ley y queremos obligarla",
+      "esperados": [
+        46
+      ]
+    },
+    {
+      "id": 12,
+      "tipo": "cotidiana",
+      "pregunta": "queremos vigilar en que gastan la plata del municipio",
+      "esperados": [
+        49,
+        48
+      ]
+    },
+    {
+      "id": 13,
+      "tipo": "cotidiana",
+      "pregunta": "muchas familias perdieron cosecha por una obra y queremos que paguen a todos",
+      "esperados": [
+        27
+      ]
+    },
+    {
+      "id": 14,
+      "tipo": "cotidiana",
+      "pregunta": "que derecho tengo si me violan un derecho fundamental y es urgente",
+      "esperados": [
+        26,
+        23
+      ]
+    },
+    {
+      "id": 15,
+      "tipo": "cotidiana",
+      "pregunta": "pueblo que no quiere contacto con nadie vive en la selva, quien lo protege",
+      "esperados": [
+        1531
+      ]
+    },
+    {
+      "id": 16,
+      "tipo": "cotidiana",
+      "pregunta": "comunidad negra quiere titulo colectivo de la tierra",
+      "esperados": [
+        1525
+      ]
+    },
+    {
+      "id": 17,
+      "tipo": "cotidiana",
+      "pregunta": "lugares sagrados de la sierra, pueden construir ahi",
+      "esperados": [
+        43
+      ]
+    },
+    {
+      "id": 18,
+      "tipo": "cotidiana",
+      "pregunta": "el colegio indigena puede contratar con el cabildo",
+      "esperados": [
+        1534,
+        1537
+      ]
+    },
+    {
+      "id": 19,
+      "tipo": "cotidiana",
+      "pregunta": "puedo pedir algo hablando sin escribir porque no se escribir bien",
+      "esperados": [
+        1505,
+        25
+      ]
+    },
+    {
+      "id": 20,
+      "tipo": "cotidiana",
+      "pregunta": "victima del conflicto indigena que ayudas hay",
+      "esperados": [
+        1526,
+        1514
+      ]
+    },
+    {
+      "id": 21,
+      "tipo": "exacta",
+      "pregunta": "Ley 21 de 1991 Convenio 169",
+      "esperados": [
+        24
+      ]
+    },
+    {
+      "id": 22,
+      "tipo": "exacta",
+      "pregunta": "artículo 330 de la Constitución territorios indígenas",
+      "esperados": [
+        23
+      ]
+    },
+    {
+      "id": 23,
+      "tipo": "exacta",
+      "pregunta": "Sentencia T-129 de 2011",
+      "esperados": [
+        41
+      ]
+    },
+    {
+      "id": 24,
+      "tipo": "exacta",
+      "pregunta": "SU-123 de 2018 reglas consulta previa",
+      "esperados": [
+        37
+      ]
+    },
+    {
+      "id": 25,
+      "tipo": "exacta",
+      "pregunta": "Decreto 2591 de 1991 artículo 86 tutela",
+      "esperados": [
+        26,
+        23
+      ]
+    },
+    {
+      "id": 26,
+      "tipo": "exacta",
+      "pregunta": "término para responder un derecho de petición Ley 1755",
+      "esperados": [
+        25
+      ]
+    },
+    {
+      "id": 27,
+      "tipo": "exacta",
+      "pregunta": "Ley 89 de 1890 cabildos",
+      "esperados": [
+        30
+      ]
+    },
+    {
+      "id": 28,
+      "tipo": "exacta",
+      "pregunta": "Decreto 1953 de 2014 territorios indígenas recursos",
+      "esperados": [
+        29
+      ]
+    },
+    {
+      "id": 29,
+      "tipo": "exacta",
+      "pregunta": "Ley 472 de 1998 acción popular derechos colectivos",
+      "esperados": [
+        27
+      ]
+    },
+    {
+      "id": 30,
+      "tipo": "exacta",
+      "pregunta": "Ley 1381 de 2010 lenguas nativas",
+      "esperados": [
+        34
+      ]
+    },
+    {
+      "id": 31,
+      "tipo": "beneficio",
+      "tema": "educación superior indígena",
+      "pregunta": "¿Qué beneficios tengo si me quiero inscribir en una universidad pública?",
+      "esperados": [
+        1415,
+        799,
+        1537
+      ],
+      "perfil": {
+        "group": "Pueblo indígena",
+        "community": "",
+        "territory": ""
+      }
+    },
+    {
+      "id": 32,
+      "tipo": "beneficio",
+      "tema": "salud propia/EPS indígenas",
+      "pregunta": "¿Qué beneficios tenemos para atendernos con nuestra medicina propia y una EPS indígena?",
+      "esperados": [
+        29,
+        33,
+        1532
+      ],
+      "perfil": {
+        "group": "Pueblo indígena",
+        "community": "",
+        "territory": ""
+      }
+    },
+    {
+      "id": 33,
+      "tipo": "beneficio",
+      "tema": "tierras/resguardos",
+      "pregunta": "¿Qué apoyo hay para ampliar nuestro resguardo y asegurar la tierra de la comunidad?",
+      "esperados": [
+        31,
+        1513
+      ],
+      "perfil": {
+        "group": "Pueblo indígena",
+        "community": "",
+        "territory": ""
+      }
+    },
+    {
+      "id": 34,
+      "tipo": "beneficio",
+      "tema": "víctimas",
+      "pregunta": "¿Qué ayudas puedo pedir como indígena víctima del conflicto que tuvo que dejar su territorio?",
+      "esperados": [
+        1526,
+        1514
+      ],
+      "perfil": {
+        "group": "Pueblo indígena",
+        "community": "",
+        "territory": ""
+      }
+    },
+    {
+      "id": 35,
+      "tipo": "beneficio",
+      "tema": "mujeres indígenas",
+      "pregunta": "Soy mujer indígena y sufro violencia en mi casa, ¿qué protección puedo recibir?",
+      "esperados": [
+        1515,
+        1523
+      ],
+      "perfil": {
+        "group": "Pueblo indígena",
+        "community": "",
+        "territory": ""
+      }
+    },
+    {
+      "id": 36,
+      "tipo": "beneficio",
+      "tema": "lenguas",
+      "pregunta": "¿Qué apoyos tenemos para que nuestros hijos sigan hablando nuestra lengua y nos atiendan en ella?",
+      "esperados": [
+        34,
+        32
+      ],
+      "perfil": {
+        "group": "Pueblo indígena",
+        "community": "",
+        "territory": ""
+      }
+    },
+    {
+      "id": 37,
+      "tipo": "beneficio",
+      "tema": "consulta previa en proyectos",
+      "pregunta": "¿Qué derechos y garantías tenemos si van a construir una carretera por nuestro territorio?",
+      "esperados": [
+        24,
+        37,
+        41
+      ],
+      "perfil": {
+        "group": "Pueblo indígena",
+        "community": "",
+        "territory": ""
+      }
+    },
+    {
+      "id": 38,
+      "tipo": "beneficio",
+      "tema": "comunidades negras",
+      "pregunta": "Somos una comunidad negra, ¿qué beneficios hay para proteger y titular nuestras tierras?",
+      "esperados": [
+        1525
+      ],
+      "perfil": {
+        "group": "Comunidad negra",
+        "community": "",
+        "territory": ""
+      }
+    },
+    {
+      "id": 39,
+      "tipo": "beneficio",
+      "tema": "participación/cabildos",
+      "pregunta": "¿Qué podemos hacer como cabildo para participar en las decisiones y manejar nuestros asuntos?",
+      "esperados": [
+        30,
+        29,
+        1530
+      ],
+      "perfil": {
+        "group": "Pueblo indígena",
+        "community": "",
+        "territory": ""
+      }
+    },
+    {
+      "id": 40,
+      "tipo": "beneficio",
+      "tema": "jurisdicción especial",
+      "pregunta": "¿Qué derechos tiene nuestra comunidad para resolver sus problemas con nuestras propias autoridades?",
+      "esperados": [
+        39,
+        40,
+        23
+      ],
+      "perfil": {
+        "group": "Pueblo indígena",
+        "community": "",
+        "territory": ""
+      }
+    }
+  ]
+}

@@ -73,6 +73,13 @@ try {
  const pending=await calculatePending({budgetMs:1000});assert.equal(pending.processed,0);
  await updateDocument(primary.document.id,{title:'Título actualizado'});assert.equal((await getDocument(primary.document.id)).title,'Título actualizado');
  await deleteDocument(privateDoc.document.id);assert.equal(await getDocument(privateDoc.document.id),null);
+ // Regresión: fichas de normas explícitas, con mucho ruido en sentencias y estado privado.
+ const anti=await createDocument({buffer:Buffer.from('LEY 1482 DE 2011\n'+('Protección frente a discriminación por pertenencia étnica. '.repeat(6))),fileName:'anti.txt',sourceKind:'upload',meta:{title:'Ley 1482 de 2011 — Ley Antidiscriminación',status:'aprobado',weight:1}});
+ const review=await createDocument({buffer:Buffer.from('Texto privado '+text),fileName:'review.txt',sourceKind:'upload',meta:{title:'Ley 1482 de 2011 — No aprobada',status:'revision',weight:1}});
+ const exact=await searchChunks('ley 1482 de 2011 discriminación',{limit:9});
+ assert.equal(exact[0].documentId,anti.document.id);
+ assert.ok(exact.every(h=>h.documentId!==review.document.id));
+ assert.ok(exact.filter(h=>h.documentId===anti.document.id).length<=2);
  await closeDatabase();
  // Cargador sobre staging sintético separado; vectores incompletos, hash incorrecto y reanudación.
  const staging=path.join(temp,'staging');fs.mkdirSync(path.join(staging,'textos'),{recursive:true});

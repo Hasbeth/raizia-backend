@@ -91,6 +91,8 @@ export type ChatMeta = {
   mode: "ia" | "conversacion" | "busqueda" | "sin_resultados";
   topics: { id: number; name: string }[];
   sources: ChatSource[];
+  /** Consultas de recuperación para depuración; la interfaz no las presenta. */
+  subtemas?: string[];
   model?: string;
   notice?: string;
   /** Herramienta que podría servir para dejar el caso por escrito. */

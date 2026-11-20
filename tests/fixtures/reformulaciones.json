@@ -1,0 +1,327 @@
+{
+  "descripcion": "Respuestas simuladas redactadas para pruebas offline; no son salidas medidas de Gemini ni una evaluación ciega del modelo.",
+  "respuestas": {
+    "1": {
+      "intencion": "una empresa quiere sacar petroleo en nuestro territorio y no nos preguntaron nada",
+      "subtemas": [
+        "consulta previa proyectos hidrocarburos territorios indígenas",
+        "consentimiento previo libre informado explotación recursos naturales"
+      ],
+      "falta": null
+    },
+    "2": {
+      "intencion": "nos sacaron de la tierra donde vivian los abuelos por la violencia",
+      "subtemas": [
+        "restitución tierras despojo desplazamiento forzado indígena",
+        "Decreto Ley 4633 de 2011 reparación víctimas indígenas"
+      ],
+      "falta": null
+    },
+    "3": {
+      "intencion": "mande carta a la alcaldia y no me contestan hace dos meses",
+      "subtemas": [
+        "derecho petición términos respuesta autoridad",
+        "Ley 1755 de 2015 silencio petición"
+      ],
+      "falta": null
+    },
+    "4": {
+      "intencion": "el hospital no quiere atender a mi hijo porque no tiene papeles",
+      "subtemas": [
+        "derecho salud menor atención urgencias sin documentos",
+        "Ley 1751 de 2015 acceso servicios salud"
+      ],
+      "falta": null
+    },
+    "5": {
+      "intencion": "en la escuela no enseñan nuestra lengua a los niños",
+      "subtemas": [
+        "etnoeducación enseñanza lengua materna",
+        "Ley 1381 de 2010 lenguas nativas educación"
+      ],
+      "falta": null
+    },
+    "6": {
+      "intencion": "el cabildo castigo a un comunero, puede el juez de afuera meterse",
+      "subtemas": [
+        "jurisdicción especial indígena autonomía autoridades judiciales",
+        "conflicto competencias juez cabildo sanción comunero"
+      ],
+      "falta": null
+    },
+    "7": {
+      "intencion": "como hacemos para que el gobierno nos reconozca el resguardo y nos de titulo de la tierra",
+      "subtemas": [
+        "constitución resguardos titulación tierras indígenas Decreto 2164",
+        "Ley 160 de 1994 dotación tierras comunidades indígenas"
+      ],
+      "falta": null
+    },
+    "8": {
+      "intencion": "el rio esta contaminado por la mineria y los peces se murieron",
+      "subtemas": [
+        "protección río contaminación minera derechos colectivos",
+        "Sentencia T-622 de 2016 río Atrato"
+      ],
+      "falta": null
+    },
+    "9": {
+      "intencion": "mi esposo me pega y en la comunidad nadie hace nada",
+      "subtemas": [
+        "violencia intrafamiliar protección mujeres Ley 1257",
+        "Convención Belém do Pará violencia mujer"
+      ],
+      "falta": null
+    },
+    "10": {
+      "intencion": "nos insultaron en el bus por ser indigenas",
+      "subtemas": [
+        "Ley 1482 de 2011 discriminación racial",
+        "hostigamiento motivos étnicos protección igualdad"
+      ],
+      "falta": null
+    },
+    "11": {
+      "intencion": "la alcaldia no cumple lo que dice la ley y queremos obligarla",
+      "subtemas": [
+        "acción cumplimiento Ley 393 de 1997",
+        "renuencia autoridad cumplimiento deber legal"
+      ],
+      "falta": null
+    },
+    "12": {
+      "intencion": "queremos vigilar en que gastan la plata del municipio",
+      "subtemas": [
+        "veedurías ciudadanas control social gestión pública",
+        "transparencia presupuesto municipal participación ciudadana"
+      ],
+      "falta": null
+    },
+    "13": {
+      "intencion": "muchas familias perdieron cosecha por una obra y queremos que paguen a todos",
+      "subtemas": [
+        "acción de grupo indemnización perjuicios Ley 472",
+        "daños colectivos obra reparación grupo afectados"
+      ],
+      "falta": null
+    },
+    "14": {
+      "intencion": "que derecho tengo si me violan un derecho fundamental y es urgente",
+      "subtemas": [
+        "acción tutela protección inmediata derechos fundamentales",
+        "Decreto 2591 de 1991 amparo derechos"
+      ],
+      "falta": null
+    },
+    "15": {
+      "intencion": "pueblo que no quiere contacto con nadie vive en la selva, quien lo protege",
+      "subtemas": [
+        "Decreto 1232 de 2018 pueblos indígenas aislamiento",
+        "protección pueblos indígenas no contactados territorio"
+      ],
+      "falta": null
+    },
+    "16": {
+      "intencion": "comunidad negra quiere titulo colectivo de la tierra",
+      "subtemas": [
+        "Ley 70 de 1993 titulación colectiva comunidades negras",
+        "propiedad colectiva tierras comunidades negras"
+      ],
+      "falta": null
+    },
+    "17": {
+      "intencion": "lugares sagrados de la sierra, pueden construir ahi",
+      "subtemas": [
+        "Línea Negra territorio ancestral Sierra Nevada",
+        "Sentencia T-849 de 2014 sitios sagrados consulta"
+      ],
+      "falta": null
+    },
+    "18": {
+      "intencion": "el colegio indigena puede contratar con el cabildo",
+      "subtemas": [
+        "Decreto 2500 de 2010 contratación educación cabildos",
+        "administración atención educativa autoridades tradicionales indígenas"
+      ],
+      "falta": null
+    },
+    "19": {
+      "intencion": "puedo pedir algo hablando sin escribir porque no se escribir bien",
+      "subtemas": [
+        "Decreto 1166 de 2016 peticiones verbales",
+        "Ley 1755 de 2015 petición verbal"
+      ],
+      "falta": null
+    },
+    "20": {
+      "intencion": "victima del conflicto indigena que ayudas hay",
+      "subtemas": [
+        "Decreto Ley 4633 de 2011 víctimas indígenas",
+        "asistencia reparación integral víctimas conflicto indígenas"
+      ],
+      "falta": null
+    },
+    "21": {
+      "intencion": "Ley 21 de 1991 Convenio 169",
+      "subtemas": [
+        "Ley 21 de 1991 Convenio 169",
+        "consulta participación pueblos indígenas tribales"
+      ],
+      "falta": null
+    },
+    "22": {
+      "intencion": "artículo 330 de la Constitución territorios indígenas",
+      "subtemas": [
+        "Constitución Política de Colombia territorios indígenas",
+        "artículo 330 gobierno territorios indígenas"
+      ],
+      "falta": null
+    },
+    "23": {
+      "intencion": "Sentencia T-129 de 2011",
+      "subtemas": [
+        "T-129/11 consentimiento previo libre informado",
+        "consulta previa proyectos afectación comunidades étnicas"
+      ],
+      "falta": null
+    },
+    "24": {
+      "intencion": "SU-123 de 2018 reglas consulta previa",
+      "subtemas": [
+        "SU-123/18 consulta previa",
+        "afectación directa consulta previa debida diligencia"
+      ],
+      "falta": null
+    },
+    "25": {
+      "intencion": "Decreto 2591 de 1991 artículo 86 tutela",
+      "subtemas": [
+        "Decreto 2591 de 1991 acción tutela",
+        "Constitución Política de Colombia artículo 86"
+      ],
+      "falta": null
+    },
+    "26": {
+      "intencion": "término para responder un derecho de petición Ley 1755",
+      "subtemas": [
+        "Ley 1755 derecho petición términos respuesta",
+        "plazo resolver peticiones información consulta"
+      ],
+      "falta": null
+    },
+    "27": {
+      "intencion": "Ley 89 de 1890 cabildos",
+      "subtemas": [
+        "Ley 89 de 1890 cabildos",
+        "gobierno cabildos resguardos indígenas"
+      ],
+      "falta": null
+    },
+    "28": {
+      "intencion": "Decreto 1953 de 2014 territorios indígenas recursos",
+      "subtemas": [
+        "Decreto 1953 territorios indígenas",
+        "administración recursos territorios indígenas"
+      ],
+      "falta": null
+    },
+    "29": {
+      "intencion": "Ley 472 de 1998 acción popular derechos colectivos",
+      "subtemas": [
+        "Ley 472 de 1998 acción popular",
+        "protección derechos intereses colectivos"
+      ],
+      "falta": null
+    },
+    "30": {
+      "intencion": "Ley 1381 de 2010 lenguas nativas",
+      "subtemas": [
+        "Ley 1381 de 2010 lenguas nativas",
+        "protección derechos lingüísticos pueblos indígenas"
+      ],
+      "falta": null
+    },
+    "31": {
+      "intencion": "educación superior indígena",
+      "subtemas": [
+        "cupos especiales acceso universidad pública indígenas T-612/17",
+        "Fondo Álvaro Ulcué Chocué ICETEX Decreto 1075 de 2015"
+      ],
+      "falta": "¿En qué universidad y programa quieres inscribirte?"
+    },
+    "32": {
+      "intencion": "salud propia/EPS indígenas",
+      "subtemas": [
+        "Ley 691 participación grupos étnicos sistema salud",
+        "Decreto 1953 salud propia intercultural SISPI",
+        "Decreto 330 EPS indígenas"
+      ],
+      "falta": null
+    },
+    "33": {
+      "intencion": "tierras/resguardos",
+      "subtemas": [
+        "Decreto 2164 de 1995 ampliación resguardos",
+        "Ley 160 de 1994 dotación tierras indígenas"
+      ],
+      "falta": null
+    },
+    "34": {
+      "intencion": "víctimas",
+      "subtemas": [
+        "Decreto Ley 4633 de 2011 asistencia reparación víctimas indígenas",
+        "Ley 1448 de 2011 ayuda desplazamiento forzado"
+      ],
+      "falta": null
+    },
+    "35": {
+      "intencion": "mujeres indígenas",
+      "subtemas": [
+        "Ley 1257 de 2008 protección violencia mujeres",
+        "Ley 248 de 1995 violencia contra mujeres"
+      ],
+      "falta": null
+    },
+    "36": {
+      "intencion": "lenguas",
+      "subtemas": [
+        "Ley 1381 de 2010 derechos lingüísticos lenguas nativas",
+        "educación bilingüe atención lengua materna indígenas"
+      ],
+      "falta": null
+    },
+    "37": {
+      "intencion": "consulta previa en proyectos",
+      "subtemas": [
+        "consulta previa afectación directa infraestructura vial pueblos indígenas",
+        "T-129/11 consentimiento previo libre informado"
+      ],
+      "falta": null
+    },
+    "38": {
+      "intencion": "comunidades negras",
+      "subtemas": [
+        "Ley 70 de 1993 comunidades negras titulación colectiva",
+        "protección propiedad colectiva comunidades negras territorio"
+      ],
+      "falta": null
+    },
+    "39": {
+      "intencion": "participación/cabildos",
+      "subtemas": [
+        "Ley 89 de 1890 cabildos indígenas autonomía",
+        "Decreto 1953 de 2014 administración territorios indígenas",
+        "Decreto 1088 asociaciones cabildos autoridades indígenas"
+      ],
+      "falta": null
+    },
+    "40": {
+      "intencion": "jurisdicción especial",
+      "subtemas": [
+        "Sentencia C-139 de 1996 jurisdicción especial indígena",
+        "Sentencia T-254 de 1994 autonomía jurisdicción indígena"
+      ],
+      "falta": null
+    }
+  }
+}
