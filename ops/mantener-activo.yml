@@ -1,0 +1,19 @@
+name: Mantener RAIZIA activo
+on:
+  schedule:
+    - cron: '23 12 * * *'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  mantener:
+    runs-on: ubuntu-latest
+    timeout-minutes: 7
+    env:
+      BACKEND_URL: ${{ secrets.BACKEND_URL }}
+      CRON_SECRET: ${{ secrets.CRON_SECRET }}
+    steps:
+      - name: Consultar base de datos
+        run: curl --fail-with-body --retry 2 --max-time 40 "$BACKEND_URL/api/status"
+      - name: Completar vectores pendientes
+        run: curl --fail-with-body --max-time 290 -X POST -H "Authorization: Bearer $CRON_SECRET" "$BACKEND_URL/api/admin/embeddings/pendientes"
