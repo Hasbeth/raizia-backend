@@ -1,8 +1,10 @@
 /**
- * Búsqueda documental sobre SQLite FTS5 y detección de temáticas.
- * No usa IA: es el motor de recuperación que alimenta al asistente y a la biblioteca.
+ * Búsqueda híbrida sobre Postgres/pgvector y detección de temáticas.
+ * Fusión RRF con degradación léxica si el proveedor de embeddings no está disponible.
  */
 import { all } from "./db";
+import { embedQuery, embeddingModel, toPgvector } from "./embeddings";
+import { hydrateChunks } from "./storage";
 import { MARK_CLOSE, MARK_OPEN } from "./constants";
 
 const STOPWORDS = new Set(
@@ -132,15 +134,15 @@ function expand(terms: string[]): Map<string, string[]> {
 }
 
 function ftsQuery(terms: string[], op: "OR" | "AND"): string {
-  return terms.map((t) => (/^\d+$/.test(t) ? `"${t}"` : `${t}*`)).join(` ${op} `);
+  return terms.map(t => /^\d+$/.test(t) ? t : t + ":*").join(op === "OR" ? " | " : " & ");
 }
 
 export type Topic = { id: number; name: string; score: number };
 
 /** Identifica las temáticas de una consulta a partir de las palabras clave de cada categoría. */
-export function detectTopics(text: string, max = 3): Topic[] {
+export async function detectTopics(text: string, max = 3): Promise<Topic[]> {
   const hay = ` ${fold(text).replace(/[^a-z0-9]+/g, " ")} `;
-  const cats = all<{ id: number; parent_id: number | null; name: string; keywords: string }>(
+  const cats = await all<{ id: number; parent_id: number | null; name: string; keywords: string }>(
     "SELECT id, parent_id, name, keywords FROM categories",
   );
   const scores = new Map<number, Topic>();
@@ -177,167 +179,138 @@ export type Hit = {
 };
 
 type HitRow = {
-  chunk_id: number;
-  document_id: number;
-  ord: number;
-  heading: string;
-  content: string;
-  title: string;
-  entity: string;
-  doc_type: string;
-  doc_date: string;
-  official_url: string;
-  weight: number | null;
-  rank: number;
+  chunk_id: number; document_id: number; ord: number; heading: string; content: string | null;
+  title: string; summary: string; entity: string; doc_type: string; doc_date: string; official_url: string;
+  weight: number; rank: number;
 };
+const COLUMNS = "c.id AS chunk_id,c.document_id,c.ord,c.heading,c.content,d.title,d.summary,d.entity,d.doc_type,d.doc_date,d.official_url,d.weight";
 
-/**
- * Recupera los fragmentos más pertinentes entre los documentos aprobados.
- * Las temáticas detectadas dan prioridad, pero no excluyen: un documento
- * transversal (p. ej. la Constitución) sigue pudiendo aparecer.
- */
-export function searchChunks(
+/** RRF combina posiciones: los rangos léxico y coseno no comparten unidades. */
+export function reciprocalRankFusion(lists: number[][], k = 60): Map<number, number> {
+  const scores = new Map<number, number>();
+  for (const list of lists) {
+    const seen = new Set<number>();
+    list.forEach((id,i) => {
+      if (!seen.has(id)) scores.set(id,(scores.get(id) || 0)+1/(k+i+1));
+      seen.add(id);
+    });
+  }
+  return scores;
+}
+export async function lexicalCandidates(query: string, publicOnly = true): Promise<HitRow[]> {
+  const terms = queryTerms(query);
+  if (!terms.length) return [];
+  const synonyms = expand(terms);
+  const match = ftsQuery([...new Set([...terms,...[...synonyms.values()].flat()])],"OR");
+  const condition = publicOnly ? "AND d.status='aprobado'" : "";
+  // Primero limita dentro del índice de expresión; después obtiene fichas.
+  const primary = await all<HitRow>(`
+    SELECT ${COLUMNS}, hit.rank FROM (
+      SELECT id, ts_rank_cd(to_tsvector('simple',f_fold(heading || ' ' || content)),to_tsquery('simple',$1)) AS rank
+      FROM chunks WHERE content IS NOT NULL AND
+        to_tsvector('simple',f_fold(heading || ' ' || content)) @@ to_tsquery('simple',$1)
+      ORDER BY rank DESC,id LIMIT 3000
+    ) hit JOIN chunks c ON c.id=hit.id JOIN documents d ON d.id=c.document_id
+    WHERE true ${condition} ORDER BY hit.rank DESC,c.id`,match);
+  // Las masivas solo consultan sus fichas en GIN; nunca se descarga un corpus para buscar.
+  const cards = await all<HitRow>(`
+    SELECT ${COLUMNS},hit.rank FROM (
+      SELECT id,ts_rank_cd(to_tsvector('simple',f_fold(title || ' ' || summary || ' ' || entity)),to_tsquery('simple',$1)) AS rank
+      FROM documents WHERE to_tsvector('simple',f_fold(title || ' ' || summary || ' ' || entity)) @@ to_tsquery('simple',$1)
+      ${publicOnly ? "AND status='aprobado'" : ""}
+      ORDER BY rank DESC,id LIMIT 300
+    ) hit JOIN documents d ON d.id=hit.id
+    JOIN LATERAL (SELECT * FROM chunks WHERE document_id=d.id ORDER BY ord LIMIT 3) c ON true
+    ORDER BY hit.rank DESC,c.id`,match);
+  const unique = new Map<number,HitRow>();
+  for (const row of [...primary,...cards].sort((a,b) => b.rank-a.rank || a.chunk_id-b.chunk_id)) {
+    if (!unique.has(row.chunk_id)) unique.set(row.chunk_id,row);
+  }
+  return [...unique.values()];
+}
+export async function vectorCandidates(vector: Float32Array, model: string): Promise<HitRow[]> {
+  const sql = `SELECT ${COLUMNS},(c.embedding <=> $1::halfvec(384)) AS rank
+    FROM chunks c JOIN documents d ON d.id=c.document_id
+    WHERE d.status='aprobado' AND c.embedding IS NOT NULL AND c.embedding_model=$2`;
+  const params = [toPgvector(vector),model] as const;
+  const [general,main] = await Promise.all([
+    all<HitRow>(sql+" ORDER BY rank,c.id LIMIT 180",...params),
+    all<HitRow>(sql+" AND d.weight>=1 ORDER BY rank,c.id LIMIT 60",...params),
+  ]);
+  return [...new Map([...general,...main].sort((a,b) => a.rank-b.rank).map(r => [r.chunk_id,r])).values()];
+}
+
+export async function searchChunks(
   query: string,
-  opts: { topicIds?: number[]; limit?: number; boostText?: string } = {},
-): Hit[] {
+  opts: { topicIds?: number[]; limit?: number; boostText?: string; publicOnly?: boolean; perDocument?: number; hydrate?: boolean; documentIds?: number[] } = {},
+): Promise<Hit[]> {
   const terms = queryTerms(query);
   if (!terms.length) return [];
   const limit = opts.limit ?? 6;
   const synonyms = expand(terms);
-
-  let rows: HitRow[];
-  try {
-    const match = ftsQuery([...new Set([...terms, ...[...synonyms.values()].flat()])], "OR");
-    // Rendimiento: el orden por pertinencia se calcula DENTRO del índice y solo los mejores
-    // candidatos se cruzan con las tablas. Cruzar antes de limitar tardaba minutos con
-    // cientos de miles de fragmentos.
-    const pool = all<HitRow>(
-      `SELECT c.id AS chunk_id, c.document_id, c.ord, c.heading, c.content,
-              d.title, d.entity, d.doc_type, d.doc_date, d.official_url, d.weight, hit.rank
-         FROM (SELECT rowid AS id, bm25(chunks_fts, 1.0, 2.5, 4.0) AS rank
-                 FROM chunks_fts WHERE chunks_fts MATCH ? ORDER BY rank LIMIT 3000) hit
-         JOIN chunks c ON c.id = hit.id
-         JOIN documents d ON d.id = c.document_id
-        WHERE d.status = 'aprobado'
-        ORDER BY hit.rank`,
-      match,
-    );
-    // Además de los mejores en general, se reservan lugares a la colección principal
-    // (normas y documentos de peso normal), para que cientos de sentencias importadas
-    // en bloque no la dejen fuera de los candidatos.
-    const seen = new Set<number>();
-    rows = [...pool.slice(0, 120), ...pool.filter((r) => (r.weight ?? 1) >= 1).slice(0, 60)].filter(
-      (r) => !seen.has(r.chunk_id) && seen.add(r.chunk_id),
-    );
-  } catch {
-    return [];
-  }
-  if (!rows.length) return [];
-  const weightOf = new Map(rows.map((r) => [r.chunk_id, r.weight ?? 1]));
-
+  const [lexical,vector] = await Promise.all([lexicalCandidates(query,opts.publicOnly ?? true),embedQuery(query)]);
+  const semantic = vector ? await vectorCandidates(vector,embeddingModel()) : [];
+  const fused = reciprocalRankFusion([lexical.map(r => r.chunk_id),semantic.map(r => r.chunk_id)]);
+  const semanticIds = new Set(semantic.map(r => r.chunk_id));
+  const candidates = [...new Map([...lexical,...semantic].map(r => [r.chunk_id,r])).values()];
+  const allowed = opts.documentIds ? new Set(opts.documentIds) : null;
+  const pool = candidates.filter(r => !allowed || allowed.has(r.document_id))
+    .sort((a,b) => (fused.get(b.chunk_id) || 0)-(fused.get(a.chunk_id) || 0));
+  // Cupos de candidatos y de resultados para la colección principal.
+  const rows = [...new Map([...pool.slice(0,Math.max(120,limit*10)),
+    ...pool.filter(r => r.weight>=1).slice(0,Math.max(60,limit*3))].map(r => [r.chunk_id,r])).values()];
   const topicDocs = new Set<number>();
   if (opts.topicIds?.length) {
     const marks = opts.topicIds.map(() => "?").join(",");
-    const ids = all<{ document_id: number }>(
-      `SELECT DISTINCT dc.document_id FROM document_categories dc
-         JOIN categories c ON c.id = dc.category_id
-        WHERE c.id IN (${marks}) OR c.parent_id IN (${marks})`,
-      ...opts.topicIds,
-      ...opts.topicIds,
-    );
-    ids.forEach((r) => topicDocs.add(r.document_id));
+    const ids = await all<{ document_id: number }>(`SELECT DISTINCT dc.document_id FROM document_categories dc
+      JOIN categories c ON c.id=dc.category_id WHERE c.id IN (${marks}) OR c.parent_id IN (${marks})`,...opts.topicIds,...opts.topicIds);
+    ids.forEach(r => topicDocs.add(r.document_id));
   }
-
-  const generic = ["pueblo", "comunidad", "resguardo", "municipio", "indigena"];
-  const boostTerms = (fold(opts.boostText || "").match(/[a-z0-9]{4,}/g) || []).filter(
-    (w) => !STOPWORDS.has(w) && !generic.includes(w),
-  );
-
-  const scored: Hit[] = rows.map((r) => {
-    const hay = fold(`${r.title} ${r.heading} ${r.content}`);
-    // Una palabra cuenta si aparece ella o alguno de sus equivalentes jurídicos.
-    const matched = terms.filter(
-      (t) => hay.includes(t) || (synonyms.get(t) || []).some((x) => hay.includes(x)),
-    ).length;
-    const coverage = matched / terms.length;
-    let score = -r.rank * (0.4 + coverage * coverage);
+  const generic = ["pueblo","comunidad","resguardo","municipio","indigena"];
+  const boostTerms = (fold(opts.boostText || "").match(/[a-z0-9]{4,}/g) || []).filter(w => !STOPWORDS.has(w) && !generic.includes(w));
+  const weightOf = new Map(rows.map(r => [r.chunk_id,r.weight]));
+  const scored = rows.map(r => {
+    const hay = fold(`${r.title} ${r.heading} ${r.content ?? r.summary}`);
+    const matched = terms.filter(t => hay.includes(t) || (synonyms.get(t) || []).some(x => hay.includes(x))).length;
+    const coverage = matched/terms.length;
+    let score = (fused.get(r.chunk_id) || 0)*(0.4+coverage*coverage);
     if (topicDocs.has(r.document_id)) score *= 1.6;
-    if (boostTerms.some((w) => hay.includes(w))) score *= 1.25;
+    if (boostTerms.some(w => hay.includes(w))) score *= 1.25;
     if (r.heading.startsWith("Artículo") || r.heading.includes("· Artículo")) score *= 1.1;
-    score *= r.weight ?? 1;
-    return {
-      chunkId: r.chunk_id,
-      documentId: r.document_id,
-      ord: r.ord,
-      heading: r.heading,
-      content: r.content,
-      title: r.title,
-      entity: r.entity,
-      docType: r.doc_type,
-      docDate: r.doc_date,
-      officialUrl: r.official_url,
-      score,
-      coverage,
-    };
+    score *= r.weight;
+    return { chunkId:r.chunk_id,documentId:r.document_id,ord:r.ord,heading:r.heading,content:r.content,
+      title:r.title,entity:r.entity,docType:r.doc_type,docDate:r.doc_date,officialUrl:r.official_url,score,coverage };
   });
-
-  // Umbral de pertinencia: evita responder con fragmentos que solo comparten una palabra suelta.
-  const minMatched = terms.length >= 5 ? 3 : terms.length >= 3 ? 2 : 1;
-  const relevant = scored.filter((h) => Math.round(h.coverage * terms.length) >= minMatched);
-  relevant.sort((a, b) => b.score - a.score);
-
-  // Las sentencias importadas en bloque (peso < 1) ocupan como máximo la mitad de los lugares
-  // mientras haya fragmentos pertinentes de la colección principal; si no los hay, completan.
-  const isBulk = (h: Hit) => (weightOf.get(h.chunkId) ?? 1) < 1;
-  const perDoc = new Map<number, number>();
-  const out: Hit[] = [];
-  const bulkCap = Math.ceil(limit / 2);
-  const pick = (allowBulkOverflow: boolean) => {
+  const minMatched = terms.length>=5 ? 3 : terms.length>=3 ? 2 : 1;
+  // La semántica admite paráfrasis que no contienen las palabras de la pregunta.
+  const relevant = scored.filter(h => semanticIds.has(h.chunkId) || Math.round(h.coverage*terms.length)>=minMatched)
+    .sort((a,b) => b.score-a.score);
+  const isBulk = (h: typeof scored[number]) => (weightOf.get(h.chunkId) ?? 1)<1;
+  const perDoc = new Map<number,number>();
+  const out: typeof scored = [];
+  const pick = (overflow: boolean) => {
     for (const h of relevant) {
-      if (out.length >= limit) break;
-      if (out.includes(h)) continue;
-      const n = perDoc.get(h.documentId) || 0;
-      if (n >= 3) continue;
-      if (!allowBulkOverflow && isBulk(h) && out.filter(isBulk).length >= bulkCap) continue;
-      perDoc.set(h.documentId, n + 1);
-      out.push(h);
+      if (out.length>=limit) break;
+      if (out.includes(h) || (perDoc.get(h.documentId) || 0)>=(opts.perDocument ?? 3)) continue;
+      if (!overflow && isBulk(h) && out.filter(isBulk).length>=Math.ceil(limit/2)) continue;
+      perDoc.set(h.documentId,(perDoc.get(h.documentId) || 0)+1); out.push(h);
     }
   };
-  pick(false);
-  pick(true);
-  out.sort((a, b) => b.score - a.score);
-  return out;
+  pick(false); pick(true);
+  out.sort((a,b) => b.score-a.score);
+  // Solo aquí se recuperan los JSON completos (máximo 6 en chat).
+  if (opts.hydrate !== false) return (await hydrateChunks(out)).filter(h => h.content.length>0);
+  return out as Hit[];
 }
 
-/** Coincidencias por contenido para la biblioteca: un fragmento resaltado por documento. */
-export function searchDocumentsByContent(
-  query: string,
-  publicOnly: boolean,
-): Map<number, { snippet: string; rank: number }> {
-  const out = new Map<number, { snippet: string; rank: number }>();
+export async function searchDocumentsByContent(query: string, publicOnly: boolean, documentIds?: number[]) {
+  const hits = await searchChunks(query,{publicOnly,documentIds,limit:600,perDocument:1,hydrate:false});
+  return new Map(hits.map(h => [h.documentId,{ snippet:h.content ? highlightExcerpt(h.content,query) : "", rank:-h.score, ord:h.ord }]));
+}
+export function highlightExcerpt(content: string, query: string): string {
+  const text = excerpt(content,query);
   const terms = queryTerms(query);
-  if (!terms.length) return out;
-  try {
-    const rows = all<{ document_id: number; snip: string; rank: number }>(
-      // Se limita dentro del índice antes de cruzar tablas (ver searchChunks).
-      `SELECT c.document_id, hit.snip, hit.rank
-         FROM (SELECT rowid AS id,
-                      snippet(chunks_fts, 0, '${MARK_OPEN}', '${MARK_CLOSE}', '…', 30) AS snip,
-                      bm25(chunks_fts, 1.0, 2.5, 4.0) AS rank
-                 FROM chunks_fts WHERE chunks_fts MATCH ? ORDER BY rank LIMIT 600) hit
-         JOIN chunks c ON c.id = hit.id
-         JOIN documents d ON d.id = c.document_id
-        ${publicOnly ? "WHERE d.status = 'aprobado'" : ""}
-        ORDER BY hit.rank`,
-      `{content heading} : (${ftsQuery(terms, "AND")})`,
-    );
-    for (const r of rows) {
-      if (!out.has(r.document_id)) out.set(r.document_id, { snippet: r.snip, rank: r.rank });
-    }
-  } catch {
-    /* consulta inválida: sin coincidencias */
-  }
-  return out;
+  return text.replace(/[\p{L}\p{N}]+/gu, word => terms.some(t => fold(word).startsWith(t)) ? MARK_OPEN+word+MARK_CLOSE : word);
 }
 
 /** Recorta un fragmento alrededor de los términos de la consulta y los resalta. */

@@ -15,11 +15,13 @@ function repository(overrides = {}) {
     getStats: () => stats,
     categoryTree: (publicOnly) => { assert.equal(publicOnly, true); return categories; },
     listFacets: (publicOnly) => { assert.equal(publicOnly, true); return facets; },
+    hydrateLibraryPage: async (docs) => docs,
     ...overrides,
   };
 }
 
 async function json(response, status = 200) {
+  response = await response;
   assert.equal(response.status, status);
   assert.match(response.headers.get("cache-control"), /no-store/);
   return response.json();

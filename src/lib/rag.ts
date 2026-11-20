@@ -24,6 +24,7 @@ export type OllamaStatus = { available: boolean; model: string | null; reason?: 
 
 /** Estado de la IA configurada (el nombre se conserva por compatibilidad con las rutas). */
 export async function ollamaStatus(): Promise<OllamaStatus> {
+  if (process.env.RAIZIA_MODO === "local" || process.env.LLM_PROVIDER === "none") return { available: false, model: null, reason: "Modo búsqueda: generación deshabilitada." };
   return PROVIDER === "gemini" ? geminiStatus() : localStatus();
 }
 
@@ -273,16 +274,16 @@ export type AskerProfile = { group: string; community: string; territory: string
 
 export type Retrieval = { topics: Topic[]; hits: Hit[]; sources: ChatSource[] };
 
-export function retrieve(
+export async function retrieve(
   message: string,
   previousUserMessage = "",
   profile?: AskerProfile,
-): Retrieval {
+): Promise<Retrieval> {
   // Las preguntas de seguimiento cortas ("¿y quién la hace?") heredan el tema anterior.
   const short = queryTerms(message).length < 3;
   const query = short && previousUserMessage ? `${previousUserMessage} ${message}` : message;
-  const topics = detectTopics(query);
-  const hits = searchChunks(query, {
+  const topics = await detectTopics(query);
+  const hits = await searchChunks(query, {
     topicIds: topics.map((t) => t.id),
     limit: 6,
     // Los apartados que mencionan a su pueblo o territorio ganan prioridad, sin excluir los demás.

@@ -309,10 +309,9 @@ export type SeedEvent = {
   detail?: string;
 };
 
-function categoryIds(slugs: string[]): number[] {
-  return slugs
-    .map((s) => get<{ id: number }>("SELECT id FROM categories WHERE slug = ?", s)?.id)
-    .filter((x): x is number => typeof x === "number");
+async function categoryIds(slugs: string[]): Promise<number[]> {
+  const rows = await Promise.all(slugs.map(s => get<{id:number}>("SELECT id FROM categories WHERE slug = ?",s)));
+  return rows.map(r=>r?.id).filter((x): x is number => typeof x==="number");
 }
 
 const wait = (ms: number) => new Promise((r) => setTimeout(r, ms));
@@ -321,7 +320,7 @@ const wait = (ms: number) => new Promise((r) => setTimeout(r, ms));
 export async function* seedOfficialSources(): AsyncGenerator<SeedEvent> {
   for (const src of [...SEED_SOURCES, ...SEED_NORMAS]) {
     const base = { url: src.url, title: src.title };
-    if (get("SELECT 1 AS x FROM documents WHERE official_url = ?", src.url)) {
+    if (await get("SELECT 1 AS x FROM documents WHERE official_url = ?", src.url)) {
       yield { ...base, outcome: "ya_existe" };
       continue;
     }
@@ -354,7 +353,7 @@ export async function* seedOfficialSources(): AsyncGenerator<SeedEvent> {
           docDate: src.docDate,
           officialUrl: src.url,
           summary: src.summary,
-          categoryIds: categoryIds(src.categories),
+          categoryIds: await categoryIds(src.categories),
           status: "aprobado",
           reviewNote:
             "Colección inicial: dirección oficial y encabezado verificados automáticamente. Pendiente de revisión jurídica humana.",
@@ -406,7 +405,7 @@ export const MULTIPART_SOURCES: MultipartSource[] = [
 async function importMultipart(src: MultipartSource): Promise<SeedEvent> {
   const url = `${src.base}.html`;
   const base = { url, title: src.title };
-  if (get("SELECT 1 AS x FROM documents WHERE official_url = ?", url)) return { ...base, outcome: "ya_existe" };
+  if (await get("SELECT 1 AS x FROM documents WHERE official_url = ?", url)) return { ...base, outcome: "ya_existe" };
   try {
     const bodies: string[] = [];
     for (let n = 0; n <= src.maxParts; n++) {
@@ -443,7 +442,7 @@ async function importMultipart(src: MultipartSource): Promise<SeedEvent> {
         docDate: src.docDate,
         officialUrl: url,
         summary: src.summary,
-        categoryIds: categoryIds(src.categories),
+        categoryIds: await categoryIds(src.categories),
         status: "aprobado",
         reviewNote: `Colección inicial: ${bodies.length} páginas oficiales unidas en un documento. Pendiente de revisión jurídica humana.`,
       },
