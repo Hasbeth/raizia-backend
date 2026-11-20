@@ -1,0 +1,9 @@
+data
+.next
+.verification
+.cache
+node_modules
+.env*
+!.env.example
+*.db
+*.zip
