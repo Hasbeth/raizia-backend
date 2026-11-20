@@ -27,7 +27,7 @@ proceso hijo aislado, sin heredar el registro de stubs.
 La batería adicional de administración permanece junto a sus handlers:
 
 ```powershell
-node --test src/app/api/admin/admin-routes.test.mjs
+node --test src/rutas/admin/admin-routes.test.mjs
 ```
 
 Resultado: **9 pruebas aprobadas**. También usa adaptadores aislados; no sube,

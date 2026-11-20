@@ -4,7 +4,7 @@ import { fileURLToPath } from "node:url";
 
 const require = createRequire(import.meta.url);
 const ts = require("typescript");
-const root = new URL("../../src/app/api/", import.meta.url);
+const root = new URL("../../src/rutas/", import.meta.url);
 
 // Evalúa los handlers reales con adaptadores explícitos; nunca importa SQLite ni .env.local.
 export function routeHarness({ documents = {}, auth = {} } = {}) {

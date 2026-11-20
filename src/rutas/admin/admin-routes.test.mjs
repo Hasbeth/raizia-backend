@@ -31,7 +31,7 @@ function harness({ admin = true, configured = true, documents = {} } = {}) {
     const localRequire = (specifier) => {
       if (specifier === "@/lib/auth") return auth;
       if (specifier === "@/lib/documents") return repository;
-      if (specifier === "@/lib/constants") return load(resolve(directory, "../../../lib/constants.ts"));
+      if (specifier === "@/lib/constants") return load(resolve(directory, "../../lib/constants.ts"));
       if (specifier === "next/headers") return { cookies: async () => ({ set: (...args) => cookieWrites.push(args) }) };
       if (specifier.startsWith(".")) return load(resolve(dirname(path), `${specifier}.ts`));
       return require(specifier);
