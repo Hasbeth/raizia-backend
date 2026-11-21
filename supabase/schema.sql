@@ -36,10 +36,9 @@ CREATE TABLE IF NOT EXISTS chunks (
   content text, content_hash text NOT NULL, embedding halfvec(384), embedding_model text,
   UNIQUE(document_id, ord), CHECK ((embedding IS NULL) = (embedding_model IS NULL))
 );
--- simple conserva el stem/prefijos/sinónimos de la aplicación sin una segunda raíz española.
--- Índice de expresión: no duplica tsvector en cada fila. Las masivas quedan fuera.
-CREATE INDEX IF NOT EXISTS idx_chunks_lexical ON chunks USING gin
-  (to_tsvector('simple', f_fold(heading || ' ' || content))) WHERE content IS NOT NULL;
+-- Sustituido por chunk_search; la búsqueda tiene respaldo mientras se hace el backfill.
+-- Este esquema es de instalación/migración explícita en PostgreSQL, nunca de arranque.
+DROP INDEX IF EXISTS idx_chunks_lexical;
 CREATE INDEX IF NOT EXISTS idx_chunks_content_hash ON chunks(content_hash);
 CREATE INDEX IF NOT EXISTS idx_chunks_pending ON chunks(id) WHERE embedding IS NULL;
 -- Algunas compilaciones de pgvector para PGlite no incluyen HNSW/halfvec.

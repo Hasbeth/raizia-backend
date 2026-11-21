@@ -9,6 +9,7 @@ import type { ChatSource } from "./constants";
 import { detectTopics, documentMatch, excerpt, fuseQueryHits, queryTerms, searchChunks, prepareSearchContext, type Hit, type Topic } from "./search";
 import { embedQueries } from "./embeddings";
 import { createTimings } from "./timings";
+import { hydrateArticleChunks } from "./storage";
 import { createGeminiBudget, createReformulator, REFORMULATION_SCHEMA, type QueryTurn, type Reformulation } from "./reformulation";
 
 export const OLLAMA_URL = (process.env.OLLAMA_URL || "http://127.0.0.1:11434").replace(/\/$/, "");
@@ -313,7 +314,7 @@ export async function retrieve(
   profile?: AskerProfile,
   history: QueryTurn[] = [],
   options: { signal?: AbortSignal; reformulate?: typeof reformulateQuery; search?: typeof searchChunks; topics?: typeof detectTopics;
-    embed?: typeof embedQueries; prepare?: typeof prepareSearchContext } = {},
+    embed?: typeof embedQueries; prepare?: typeof prepareSearchContext; hydrate?: typeof hydrateArticleChunks } = {},
 ): Promise<Retrieval> {
   // Las preguntas de seguimiento cortas ("¿y quién la hace?") heredan el tema anterior.
   const short = queryTerms(message).length < 3;
@@ -337,12 +338,27 @@ export async function retrieve(
   })));
   // Reutiliza el trabajo idéntico sin quitar ninguna posición de la fusión original.
   const lists = queries.map(q => uniqueLists[uniqueQueries.indexOf(q)]);
-  const { hydrateChunks } = await import("./storage");
-  // Se hidrata un pequeño conjunto de reserva para reemplazar archivos faltantes.
-  const candidates = await timings.measure("hidratacion", () => hydrateChunks(fuseQueryHits(lists, 18)));
-  const nonempty = new Set(candidates.filter(h => h.content.trim()).map(h => h.chunkId));
+  // Reserva acotada por las búsquedas (12 por consulta). El cupo por documento se
+  // aplica DESPUÉS de unir artículos: dos partes no deben excluir otra candidata.
+  const candidates = await timings.measure("hidratacion", () => (options.hydrate || hydrateArticleChunks)(
+    fuseQueryHits(lists, uniqueQueries.length * 12, Infinity), [...new Set(queries.flatMap(queryTerms))]));
   const hydrated = new Map(candidates.map(h => [h.chunkId, h]));
-  const hits = fuseQueryHits(lists.map(list => list.filter(h => nonempty.has(h.chunkId)).map(h => ({ ...h, content: hydrated.get(h.chunkId)!.content }))), 9);
+  const articles = new Map<string, Hit>();
+  for (const h of candidates) if (h.articleKey && !articles.has(h.articleKey)) articles.set(h.articleKey, h);
+  const mergedLists = lists.map(list => {
+    const merged = new Map<number, Hit>();
+    for (const h of list) {
+      const full = hydrated.get(h.chunkId);
+      if (!full?.content.trim()) continue;
+      const canonical = full.articleKey ? articles.get(full.articleKey)! : full;
+      const previous = merged.get(canonical.chunkId);
+      merged.set(canonical.chunkId, { ...h, ...full, chunkId: canonical.chunkId, ord: canonical.ord,
+        coverage: Math.max(h.coverage, previous?.coverage ?? 0),
+        documentMatch: Math.max(h.documentMatch ?? 0, previous?.documentMatch ?? 0) });
+    }
+    return [...merged.values()];
+  });
+  const hits = fuseQueryHits(mergedLists, 9);
   const clarification = reformulation?.falta && !subtemas.some(q => supportsSubtopic(q, hits)) ? reformulation.falta : null;
   const sources: ChatSource[] = hits.map((h, i) => ({
     n: i + 1,
@@ -366,8 +382,8 @@ Reglas obligatorias:
 1. Responde ÚNICAMENTE con la información de las FUENTES numeradas que recibes. No uses conocimiento externo.
 2. Cada dato jurídico debe llevar la cita de su fuente entre corchetes, por ejemplo [1] o [2]. Cita solo números de fuentes que existan.
 3. Nunca inventes normas, artículos, sentencias, fechas, plazos ni entidades. Solo menciona los que aparezcan escritos en las fuentes.
-4. Si las fuentes no bastan para responder, dilo con claridad y explica solo lo que sí dicen.
-5. Empieza con una respuesta directa aplicada a la persona y a su perfil compartido: por ejemplo "Como integrante de un pueblo indígena, puedes…", solo si las fuentes lo respaldan. No empieces con "encontré esto". No prometas acceso automático a beneficios.
+4. Nunca afirmes que un derecho, exoneración o beneficio NO existe solo porque no aparece en las fuentes. En ese caso di "en las fuentes que revisé no encontré ese punto" y sugiere confirmarlo. Si las fuentes no bastan para responder, explica solo lo que sí dicen.
+5. Empieza con una respuesta directa aplicada a la persona y a su perfil compartido: por ejemplo "Como integrante de un pueblo indígena, puedes…", solo si las fuentes lo respaldan. Si una fuente reconoce expresamente un derecho, exoneración o beneficio a la persona según su perfil, ponlo primero, con su condición o requisito exacto y su cita. No empieces con "encontré esto". No prometas acceso automático a beneficios.
 6. Usa tres secciones cortas: "Lo que te puede aplicar" (lista numerada, cada punto con su cita [n]); "Qué necesitas" (documentos y requisitos SOLO si aparecen en las fuentes; si no, di que las fuentes no los precisan); "Qué hacer" (pasos concretos y a quién acudir SOLO si las fuentes los indican). Si faltan pasos, sugiere qué preguntar en una oficina típica, como admisiones para estudios, identificándolo como una sugerencia para averiguar, sin afirmar competencia jurídica ni inventar entidades, normas o plazos.
 7. Máximo unas 220 palabras. No repitas la pregunta ni copies párrafos largos. Es orientación general, no asesoría legal definitiva.
 8. Las sentencias resuelven casos concretos: preséntalas como "en un caso parecido, la Corte…". No asegures que el caso de la persona se resolverá igual ni califiques como ilegal la conducta de nadie.
@@ -436,7 +452,7 @@ export function buildMessages(
   const context = hits
     .map((h, i) => {
       const where = [h.title, h.heading].filter(Boolean).join(" — ");
-      return `[${i + 1}] ${where}\n${excerpt(h.content, [message, ...(reformulation?.subtemas || [])].join(" "), 1400)}`;
+      return `[${i + 1}] ${where}\n${h.articleContext ? h.content : excerpt(h.content, [message, ...(reformulation?.subtemas || [])].join(" "), 1400)}`;
     })
     .join("\n\n");
   const past = history.slice(-4).map((m) => ({

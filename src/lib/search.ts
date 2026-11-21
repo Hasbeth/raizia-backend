@@ -180,6 +180,8 @@ export type Hit = {
   weight?: number;
   documentMatch?: number;
   queryIndexes?: number[];
+  articleKey?: string;
+  articleContext?: boolean;
 };
 
 type HitRow = {

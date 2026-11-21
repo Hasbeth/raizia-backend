@@ -36,7 +36,10 @@ test('PGlite: trigger, RLS, léxica equivalente, respaldo por biblioteca y relle
     await q("INSERT INTO chunks(id,document_id,ord,heading,content,content_hash) VALUES(1,1,0,'','Agua petición','a'),(2,2,0,'','Agua petición','b'),(3,1,1,'','Agua','c'),(4,1,2,'Cabecera',NULL,'d')");
     assert.equal((await saved()).length,3);
     const before = await q("SELECT oid,relfilenode FROM pg_class WHERE relname IN ('chunks','idx_chunks_embedding_hnsw') ORDER BY oid");
+    await q("CREATE INDEX idx_chunks_lexical ON chunks USING gin (to_tsvector('simple', f_fold(heading || ' ' || content))) WHERE content IS NOT NULL");
     await applySchema(database);
+    assert.deepEqual(await q("SELECT indexname FROM pg_indexes WHERE indexname='idx_chunks_lexical'"),[]);
+    await applySchema(database); // DROP IF EXISTS es idempotente.
     assert.deepEqual(await q("SELECT oid,relfilenode FROM pg_class WHERE relname IN ('chunks','idx_chunks_embedding_hnsw') ORDER BY oid"),before);
     assert.equal((await q("SELECT count(*)::int n FROM pg_trigger WHERE tgname='trg_chunk_search'"))[0].n,1);
     assert.equal((await q("SELECT relrowsecurity FROM pg_class WHERE relname='chunk_search'"))[0].relrowsecurity,true);

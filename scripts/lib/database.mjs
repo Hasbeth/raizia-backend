@@ -15,9 +15,11 @@ export async function createDatabase({ url = process.env.DATABASE_URL, directory
       exec: async statement => { await client.unsafe(statement).simple(); },
       transaction: fn => client.begin(t => fn(wrap(t))),
     });
+    // Producción: conexión diferida SIN DDL. applySchema es exclusivo del cargador/
+    // mantenimiento explícito; GIN/HNSW y DROP INDEX no pertenecen al arranque frío.
     return { ...wrap(sql), kind: 'postgres', close: () => sql.end({ timeout: 5 }) };
   }
-  if (process.env.VERCEL && !isLocal()) throw new Error('Configura DATABASE_URL en Vercel: PGlite es solo local.');
+  if ((process.env.VERCEL || process.env.NODE_ENV === 'production') && !isLocal()) throw new Error('Configura DATABASE_URL en producción: PGlite es solo local.');
   const { PGlite } = await import(/* webpackIgnore: true */ /* turbopackIgnore: true */ '@electric-sql/pglite');
   let vector;
   if (process.env.RAIZIA_PGLITE_VECTOR) {

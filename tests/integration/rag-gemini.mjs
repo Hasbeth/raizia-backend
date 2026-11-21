@@ -23,7 +23,16 @@ assert.equal(await reformulateQuery('Nueva consulta bloqueada'),null);
 assert.equal(calls.length,3,'El 429 debe impedir otro fetch, incluido el reintento de JSON.');
 assert.equal((await ollamaStatus()).available,false,'Con cuota agotada el chat debe mostrar búsqueda sin intentar generar.');
 const queries=[];
-const result=await retrieve('¿Qué beneficios recibo?', '', undefined, [], {topics:async()=>[],search:async query=>{queries.push(query);return [];}});
+let prepared=0,embedded=0;
+const result=await retrieve('¿Qué beneficios recibo?', '', undefined, [], {
+  topics:async()=>[],search:async query=>{queries.push(query);return [];},
+  prepare:async()=>{prepared++;return {approvedDocumentIds:[],topicDocs:new Set(),lexicalIndex:false};},
+  embed:async inputs=>{embedded++;assert.deepEqual(inputs,['¿Qué beneficios recibo?']);return [null];},
+});
+assert.equal(prepared,1);
+assert.equal(embedded,1);
+const {accesos}=await import('../support/db-stub.mjs');
+assert.equal(accesos,0,'El transporte no debe abrir PGlite ni PostgreSQL accidentalmente.');
 assert.deepEqual(queries,['¿Qué beneficios recibo?']);
 assert.deepEqual(result.subtemas,[]);
 console.log('Gemini simulado: JSON, reintento, caché, 429 y fallback verificados.');

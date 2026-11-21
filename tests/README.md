@@ -211,3 +211,34 @@ y el 1415 (T-612/17, fragmentos 169369 y 169370 sobre cupos especiales).
 La inspección del texto confirma matrícula o sostenimiento en el fragmento
 24785; esto no garantiza que una persona cumpla los requisitos. El juego no
 usa T-179/23 como expectativa de admisión, pues su ficha trata de requisitos de grado.
+
+## Integridad de artículos y arranque de base
+
+La hidratación del chat consulta en un solo lote los artículos con `weight>=1`.
+Une únicamente vecinos consecutivos del mismo documento con el mismo `heading`
+exacto, elimina traslapes y conserva una fuente numerada por artículo. La selección
+final mantiene nueve fuentes y dos por documento, rellenando el cupo que liberan
+las partes unidas. Los artículos llegan al prompt sin el antiguo recorte de 1.400
+caracteres: el límite es 3.500, con una ventana de literales/numerales completos
+puntuada por la pregunta y sus subtemas. Si ni un apartado completo cabe, se indica
+la omisión en lugar de presentar una cita cortada. Las masivas no se expanden.
+
+`article-context.test.mjs` usa PGlite y un fixture del artículo 12 con el literal j
+para comprobar el texto final del prompt, límites, contigüidad, traslapes y cupos.
+El fixture no modifica el corpus de evaluación ni agrega expectativas a su métrica.
+
+El timeout del transporte Gemini provenía de omitir el stub de
+`prepareSearchContext`: pese a simular la búsqueda, se abría PGlite real y se
+ejecutaba el esquema. La prueba ahora simula preparación/embeddings e intercepta
+la base para exigir cero accesos; conserva el transporte real, las aserciones de
+JSON/reintento/caché/429/fallback y el timeout de 15 segundos.
+
+`createDatabase` aplica `schema.sql` automáticamente solo para PGlite local.
+La rama PostgreSQL retorna antes: los índices GIN/HNSW y el `DROP INDEX IF EXISTS
+idx_chunks_lexical` se ejecutan únicamente al aplicar el esquema explícitamente
+en instalación/mantenimiento (también desde el cargador). El arranque productivo
+sin `DATABASE_URL` falla antes de abrir PGlite, incluso fuera de Vercel.
+`database-startup.test.mjs` verifica con stubs que ese arranque no lee el esquema
+ni ejecuta SQL; `chunk-search.test.mjs` comprueba el borrado idempotente del índice
+antiguo sin reescribir `chunks` ni reconstruir HNSW. El DROP normal puede tomar un
+bloqueo durante la migración explícita; no se ejecuta en un arranque frío productivo.
