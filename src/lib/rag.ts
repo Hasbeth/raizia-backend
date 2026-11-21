@@ -6,7 +6,9 @@
  * Si la IA no está disponible, el flujo degrada a búsqueda documental sin IA.
  */
 import type { ChatSource } from "./constants";
-import { detectTopics, documentMatch, excerpt, fuseQueryHits, queryTerms, searchChunks, type Hit, type Topic } from "./search";
+import { detectTopics, documentMatch, excerpt, fuseQueryHits, queryTerms, searchChunks, prepareSearchContext, type Hit, type Topic } from "./search";
+import { embedQueries } from "./embeddings";
+import { createTimings } from "./timings";
 import { createGeminiBudget, createReformulator, REFORMULATION_SCHEMA, type QueryTurn, type Reformulation } from "./reformulation";
 
 export const OLLAMA_URL = (process.env.OLLAMA_URL || "http://127.0.0.1:11434").replace(/\/$/, "");
@@ -310,23 +312,34 @@ export async function retrieve(
   previousUserMessage = "",
   profile?: AskerProfile,
   history: QueryTurn[] = [],
-  options: { signal?: AbortSignal; reformulate?: typeof reformulateQuery; search?: typeof searchChunks; topics?: typeof detectTopics } = {},
+  options: { signal?: AbortSignal; reformulate?: typeof reformulateQuery; search?: typeof searchChunks; topics?: typeof detectTopics;
+    embed?: typeof embedQueries; prepare?: typeof prepareSearchContext } = {},
 ): Promise<Retrieval> {
   // Las preguntas de seguimiento cortas ("¿y quién la hace?") heredan el tema anterior.
   const short = queryTerms(message).length < 3;
   const query = short && previousUserMessage ? `${previousUserMessage} ${message}` : message;
   const turns = history.length ? history : previousUserMessage ? [{ role: "user" as const, content: previousUserMessage }] : [];
-  const reformulation = await (options.reformulate || reformulateQuery)(message, profile, turns, options.signal).catch(() => null);
+  const timings = createTimings();
+  const reformulation = await timings.measure("reformulacion", () =>
+    (options.reformulate || reformulateQuery)(message, profile, turns, options.signal).catch(() => null));
   const subtemas = reformulation?.subtemas || [];
   const queries = [query, ...subtemas];
-  const topics = await (options.topics || detectTopics)(queries.join(" "));
-  const lists = await Promise.all(queries.map(q => (options.search || searchChunks)(q, {
+  const uniqueQueries = [...new Set(queries)];
+  const [topics, vectors] = await Promise.all([
+    (options.topics || detectTopics)(queries.join(" ")),
+    timings.measure("embeddings", () => (options.embed || embedQueries)(uniqueQueries, { signal: options.signal })),
+  ]);
+  const context = await (options.prepare || prepareSearchContext)(topics.map(t => t.id));
+  const uniqueLists = await Promise.all(uniqueQueries.map((q, i) => (options.search || searchChunks)(q, {
     topicIds: topics.map(t => t.id), limit: 12, perDocument: 2, hydrate: false,
     boostText: profile ? profile.community + " " + profile.territory : "",
+    context, vector: vectors[i], timings,
   })));
+  // Reutiliza el trabajo idéntico sin quitar ninguna posición de la fusión original.
+  const lists = queries.map(q => uniqueLists[uniqueQueries.indexOf(q)]);
   const { hydrateChunks } = await import("./storage");
   // Se hidrata un pequeño conjunto de reserva para reemplazar archivos faltantes.
-  const candidates = await hydrateChunks(fuseQueryHits(lists, 18));
+  const candidates = await timings.measure("hidratacion", () => hydrateChunks(fuseQueryHits(lists, 18)));
   const nonempty = new Set(candidates.filter(h => h.content.trim()).map(h => h.chunkId));
   const hydrated = new Map(candidates.map(h => [h.chunkId, h]));
   const hits = fuseQueryHits(lists.map(list => list.filter(h => nonempty.has(h.chunkId)).map(h => ({ ...h, content: hydrated.get(h.chunkId)!.content }))), 9);
@@ -343,6 +356,7 @@ export async function retrieve(
     excerpt: excerpt(h.content, query),
     officialUrl: h.officialUrl,
   }));
+  timings.report();
   return { topics, hits, sources, subtemas, reformulation, clarification };
 }
 

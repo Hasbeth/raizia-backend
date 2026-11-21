@@ -35,8 +35,10 @@ async function geminiEmbed(texts, query, signal) {
   if (isLocal()) throw new Error('Gemini deshabilitado en RAIZIA_MODO=local.');
   const key = process.env.GEMINI_API_KEY;
   if (!key) throw new Error('Gemini no está configurado.');
-  const operation = query ? 'embedContent' : 'batchEmbedContents';
-  const payload = query ? { model: MODEL, content: { parts: [{text:texts[0]}] }, outputDimensionality: EMBED_DIMS, taskType: 'RETRIEVAL_QUERY' }
+  const single = query && texts.length === 1;
+  const operation = single ? 'embedContent' : 'batchEmbedContents';
+  const queryRequests = () => texts.map(text => ({ model: MODEL, content: { parts: [{text}] }, outputDimensionality: EMBED_DIMS, taskType: 'RETRIEVAL_QUERY' }));
+  const payload = query ? (single ? queryRequests()[0] : { requests: queryRequests() })
     : embeddingRequest(texts.map(content => ({content})), EMBED_DIMS);
   const response = await fetch('https://generativelanguage.googleapis.com/v1beta/'+MODEL+':'+operation, {
     method:'POST', headers:{'Content-Type':'application/json','x-goog-api-key':key}, body:JSON.stringify(payload),
@@ -44,7 +46,7 @@ async function geminiEmbed(texts, query, signal) {
   });
   if (!response.ok) throw new Error('Embeddings Gemini no disponibles ('+response.status+').');
   const data = await response.json();
-  const vectors = query ? [data.embedding] : data.embeddings;
+  const vectors = single ? [data.embedding] : data.embeddings;
   if (!Array.isArray(vectors) || vectors.length !== texts.length) throw new Error('Respuesta de embeddings incompleta.');
   return vectors.map(v => normalizeVector(v.values, EMBED_DIMS));
 }
@@ -63,17 +65,34 @@ export async function embedDocuments(texts, { signal } = {}) {
 const queryCache = new Map();
 let unavailableUntil = 0;
 export async function embedQuery(text, { signal } = {}) {
-  if (process.env.RAIZIA_EMBED_DISABLED === '1' || Date.now() < unavailableUntil) return null;
-  const key = embeddingModel()+':'+text.trim();
-  const hit = queryCache.get(key);
-  if (hit) { queryCache.delete(key); queryCache.set(key,hit); return hit; }
+  return (await embedQueries([text], { signal }))[0];
+}
+
+/** Conserva orden, caché y degradación léxica, pero infiere juntas las consultas pendientes. */
+export async function embedQueries(texts, { signal } = {}) {
+  if (!texts.length) return [];
+  if (process.env.RAIZIA_EMBED_DISABLED === '1' || Date.now() < unavailableUntil) return texts.map(() => null);
+  const keys = texts.map(text => embeddingModel()+':'+text.trim());
+  const missing = new Map(), resolved = new Map();
+  keys.forEach((key, i) => {
+    const hit = queryCache.get(key);
+    if (hit) { queryCache.delete(key); queryCache.set(key,hit); resolved.set(key,hit); }
+    else if (!missing.has(key)) missing.set(key,texts[i]);
+  });
   try {
-    const [vector] = await (providerName() === 'local' ? localEmbed([text],true) : geminiEmbed([text],true,signal));
-    queryCache.set(key,vector);
-    if (queryCache.size>128) queryCache.delete(queryCache.keys().next().value);
-    return vector;
+    const entries = [...missing];
+    for (let i=0;i<entries.length;i+=32) {
+      signal?.throwIfAborted();
+      const batch = entries.slice(i,i+32);
+      const inputs = batch.map(([,text]) => text);
+      const vectors = await (providerName() === 'local' ? localEmbed(inputs,true) : geminiEmbed(inputs,true,signal));
+      batch.forEach(([key], index) => {
+        queryCache.set(key,vectors[index]); resolved.set(key,vectors[index]);
+        if (queryCache.size>128) queryCache.delete(queryCache.keys().next().value);
+      });
+    }
   } catch {
     unavailableUntil = Date.now()+30_000;
-    return null; // El usuario sigue recibiendo búsqueda léxica.
   }
+  return keys.map(key => resolved.get(key) ?? null); // El usuario sigue recibiendo búsqueda léxica.
 }

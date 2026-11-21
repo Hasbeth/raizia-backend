@@ -49,6 +49,27 @@ DO $$ BEGIN
     USING hnsw (embedding halfvec_cosine_ops) WITH (m=12, ef_construction=48);
 EXCEPTION WHEN feature_not_supported OR undefined_object OR undefined_function THEN NULL;
 END $$;
+-- Vector léxico almacenado aparte: no ensancha ni reescribe chunks/HNSW.
+CREATE TABLE IF NOT EXISTS chunk_search (
+  chunk_id integer PRIMARY KEY REFERENCES chunks(id) ON DELETE CASCADE,
+  tsv tsvector NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_chunk_search_tsv ON chunk_search USING gin (tsv);
+CREATE OR REPLACE FUNCTION sync_chunk_search() RETURNS trigger
+LANGUAGE plpgsql SET search_path = public, pg_catalog AS $$
+BEGIN
+  IF NEW.content IS NULL THEN
+    DELETE FROM chunk_search WHERE chunk_id = NEW.id;
+  ELSE
+    INSERT INTO chunk_search(chunk_id, tsv)
+    VALUES (NEW.id, to_tsvector('simple', f_fold(NEW.heading || ' ' || NEW.content)))
+    ON CONFLICT (chunk_id) DO UPDATE SET tsv = EXCLUDED.tsv;
+  END IF;
+  RETURN NEW;
+END $$;
+CREATE OR REPLACE TRIGGER trg_chunk_search
+AFTER INSERT OR UPDATE OF heading, content ON chunks
+FOR EACH ROW EXECUTE FUNCTION sync_chunk_search();
 CREATE TABLE IF NOT EXISTS storage_objects (
   bucket text NOT NULL, path text NOT NULL, bytes bigint NOT NULL, content_hash text NOT NULL,
   updated_at timestamptz NOT NULL DEFAULT CURRENT_TIMESTAMP, PRIMARY KEY(bucket,path)
@@ -64,6 +85,7 @@ ALTER TABLE categories ENABLE ROW LEVEL SECURITY;
 ALTER TABLE documents ENABLE ROW LEVEL SECURITY;
 ALTER TABLE document_categories ENABLE ROW LEVEL SECURITY;
 ALTER TABLE chunks ENABLE ROW LEVEL SECURITY;
+ALTER TABLE chunk_search ENABLE ROW LEVEL SECURITY;
 ALTER TABLE storage_objects ENABLE ROW LEVEL SECURITY;
 ALTER TABLE maintenance_jobs ENABLE ROW LEVEL SECURITY;
 ALTER TABLE rate_limits ENABLE ROW LEVEL SECURITY;

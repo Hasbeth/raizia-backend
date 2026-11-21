@@ -6,6 +6,8 @@ import { documentMatch, legalReferences, fuseQueryHits } from '../src/lib/search
 
 const result = { intencion: 'Acceso a educación superior', subtemas: ['cupos especiales universidad indígenas', 'financiación educación superior ICETEX'], falta: '¿En qué universidad quieres estudiar?' };
 const raw = JSON.stringify(result);
+const sharedStubs = { embed: async queries => queries.map(() => null),
+  prepare: async () => ({ approvedDocumentIds: [], topicDocs: new Set(), lexicalIndex: false }) };
 const hit = (id, doc = id, extra = {}) => ({ chunkId: id, documentId: doc, ord: 0, heading: '',
   content: 'Cupos especiales universidad indígenas y financiación educación superior ICETEX.', title: 'Fuente', entity: '', docType: 'Ley', docDate: '', officialUrl: '',
   score: 1, coverage: 1, weight: 1, ...extra });
@@ -112,7 +114,7 @@ test('La reserva principal sobrevive a muchas fichas masivas; no fabrica resulta
 
 test('Retrieve busca original más subtemas y degrada a una sola búsqueda ante fallo', async () => {
   const queries = [];
-  const options = { topics: async () => [], search: async q => { queries.push(q); return [hit(1)]; }, reformulate: async () => result };
+  const options = { ...sharedStubs, topics: async () => [], search: async q => { queries.push(q); return [hit(1)]; }, reformulate: async () => result };
   const response = await retrieve('Quiero ir a universidad', '', undefined, [], options);
   assert.deepEqual(queries, ['Quiero ir a universidad', ...result.subtemas]);
   assert.deepEqual(response.subtemas,result.subtemas); assert.equal(response.clarification,null);
@@ -122,10 +124,53 @@ test('Retrieve busca original más subtemas y degrada a una sola búsqueda ante 
 });
 
 test('Consulta amplia sin respaldo pide solo aclaración; un tema respaldado permite orientación', async () => {
-  const options = { topics: async () => [], search: async () => [hit(1,1,{content:'Texto ajeno sobre presupuesto de carreteras.',coverage:0.1})], reformulate: async () => result };
+  const options = { ...sharedStubs, topics: async () => [], search: async () => [hit(1,1,{content:'Texto ajeno sobre presupuesto de carreteras.',coverage:0.1})], reformulate: async () => result };
   const response = await retrieve('¿Qué beneficios tengo?', '', undefined, [], options);
   assert.equal(response.clarification,result.falta);
   assert.equal(supportsSubtopic(result.subtemas[0],[hit(1)]),true);
+});
+
+test('Retrieve comparte contexto y embeddings por lote, reutiliza duplicados y mide sin texto personal', async t => {
+  const message = 'Consulta privada de prueba';
+  const queries = [message,'becas universidad','salud propia'];
+  const context = { approvedDocumentIds:[1,2], topicDocs:new Set([1]), lexicalIndex:true };
+  const vectors = queries.map((_,i)=>new Float32Array([i+1]));
+  let topicCalls=0,prepareCalls=0,embedCalls=0;
+  const searched=[];
+  const logs=[];
+  const previous = process.env.RAIZIA_TIEMPOS;
+  t.mock.method(console,'log',line=>logs.push(line));
+  process.env.RAIZIA_TIEMPOS='1';
+  try {
+    const response = await retrieve(message,'',undefined,[],{
+      reformulate: async()=>({...result,subtemas:[...queries.slice(1),message],falta:null}),
+      topics: async()=>{topicCalls++;return [{id:4,name:'Tema',score:1}];},
+      prepare: async ids=>{prepareCalls++;assert.deepEqual(ids,[4]);return context;},
+      embed: async inputs=>{embedCalls++;assert.deepEqual(inputs,queries);return vectors;},
+      search: async(q,opts)=>{
+        searched.push(q);
+        assert.equal(opts.context,context);
+        assert.equal(opts.vector,vectors[queries.indexOf(q)]);
+        assert.equal(opts.hydrate,false);
+        assert.equal(opts.limit,12);
+        await opts.timings.measure('lexica',async()=>{});
+        await opts.timings.measure('vectorial',async()=>{});
+        return [hit(queries.indexOf(q)+1)];
+      },
+    });
+    assert.deepEqual(searched,queries);
+    assert.equal(topicCalls,1);assert.equal(prepareCalls,1);assert.equal(embedCalls,1);
+    assert.deepEqual(response.hits.map(h=>h.chunkId),fuseQueryHits([[hit(1)],[hit(2)],[hit(3)],[hit(1)]],9).map(h=>h.chunkId));
+    assert.equal(logs.length,1);
+    const durations=JSON.parse(logs[0]);
+    assert.deepEqual(Object.keys(durations),['reformulacion_ms','embeddings_ms','lexica_ms','vectorial_ms','hidratacion_ms']);
+    assert.ok(Object.values(durations).every(n=>Number.isFinite(n)&&n>=0));
+    process.env.RAIZIA_TIEMPOS='0';
+    await retrieve(message,'',undefined,[],{...sharedStubs,topics:async()=>[],reformulate:async()=>null,search:async()=>[hit(1)]});
+    assert.equal(logs.length,1);
+  } finally {
+    if(previous===undefined)delete process.env.RAIZIA_TIEMPOS;else process.env.RAIZIA_TIEMPOS=previous;
+  }
 });
 
 test('Sin Gemini configurado o en modo local la reformulación no usa red', async () => {

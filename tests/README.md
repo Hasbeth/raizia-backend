@@ -7,8 +7,9 @@ La sal usa el `CRON_SECRET` existente; solo `RAIZIA_MODO=local` permite la sal f
 Si no se puede contar, se permite continuar y se registra un mensaje sin datos
 personales. La tarea de mantenimiento elimina ventanas de más de dos días.
 
-`vector-index.test.mjs` comprueba la forma de consulta compatible con HNSW,
-los filtros, cupos y transacción secuencial. `rate-limit.test.mjs` cubre los
+`vector-index.test.mjs` comprueba un solo recorrido HNSW de 320 candidatos,
+los filtros, los cupos 180/60, los solapamientos y el orden por distancia.
+`rate-limit.test.mjs` cubre los
 límites, el hash de IP, el respaldo de cabeceras, fail-open y la respuesta 429.
 La integración PGlite comprueba esquema idempotente, RLS sin políticas,
 incrementos concurrentes y limpieza con el límite exacto de dos días.
@@ -19,8 +20,8 @@ de `.verification/`, con el código y un enlace al `node_modules` instalado.
 Ejecutar allí `npm.cmd run build` con `NODE_OPTIONS=--require` y la ruta absoluta
 a `tests/support/offline.cjs`, además de las variables locales indicadas abajo.
 La precarga bloquea archivos de entorno, HTTP y TCP externo; permite el canal
-local que usan los workers de Turbopack. Borrar la copia después de verificarla
-para que TypeScript y ESLint no recorran artefactos generados.
+local que usan los workers de Turbopack. `.verification` queda excluida de
+TypeScript y ESLint para que no recorran los artefactos de estas copias.
 
 Ejecutar `npm test` con Node.js 26. En PowerShell con scripts deshabilitados,
 usar `npm.cmd test`. El comando ejecuta `tests/*.test.mjs` sin iniciar servidores,
@@ -168,6 +169,41 @@ En híbrido persiste el fallo de la pregunta 6 (intervención del juez externo
 frente a una sanción del cabildo); en léxico también falla la 22 (artículo 330).
 Las tres regresiones fuera del conjunto puntuado pasan: Ley 1482/2011,
 T-129/11 y Decreto 1953 quedan primeros.
+
+## Optimización de recuperación y despliegue del índice auxiliar
+
+Aplicar `supabase/schema.sql` antes de publicar el buscador. Es idempotente y
+añade `chunk_search`, GIN, RLS sin políticas y un trigger; no reescribe `chunks`
+ni reconstruye su HNSW. El trigger mantiene inserciones y cambios de cabecera
+o contenido; un contenido NULL elimina la entrada. El borrado funciona en cascada.
+
+Con `DATABASE_URL` ya definida en el entorno del proceso, ejecutar:
+
+```powershell
+node scripts/backfill-chunk-search.mjs
+node scripts/backfill-chunk-search.mjs --after-id 12345
+```
+
+El segundo comando ejemplifica una reanudación: sustituir `12345` por el último
+`lastId` confirmado. Cada lote contiene hasta 2000 entradas, usa upsert y puede
+repetirse desde cero. El script no carga archivos de entorno ni imprime la URL.
+El buscador conserva la consulta anterior mientras no existan filas indexadas
+para la biblioteca visible. Durante un relleno parcial usa las filas ya presentes;
+completar el relleno antes de publicar garantiza cobertura léxica completa.
+
+`retrieve` comparte aprobaciones, documentos por tema y disponibilidad del índice
+durante una petición. Los embeddings pendientes se calculan juntos en e5 local
+o Gemini (`RETRIEVAL_QUERY`), conservando caché y respaldo léxico. La fusión y los
+cupos finales no cambian. `RAIZIA_TIEMPOS=1` imprime únicamente cinco duraciones
+en milisegundos: reformulación, embeddings, léxica, vectorial e hidratación. Son
+sumas de trabajo por etapa; las etapas paralelas no deben sumarse como latencia
+total. Por defecto no se imprimen.
+
+`chunk-search.test.mjs` verifica el trigger, RLS, esquema idempotente, equivalencia
+léxica, respaldo, lotes y reanudación con PGlite. `query-embeddings.test.mjs` usa
+proveedores simulados para comprobar lotes, orden, caché y fallo. La evaluación
+completa rellena su copia local y falla si baja de 29/30 originales o 10/10 beneficios
+en híbrido con reformulaciones simuladas.
 
 Para educación universitaria, el contexto reformulado incluye el documento
 1537 (Decreto 1075, fragmentos 24778 y 24785 del Fondo Álvaro Ulcué Chocué)

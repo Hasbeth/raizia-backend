@@ -5,6 +5,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { DatabaseSync } from 'node:sqlite';
 import { createHash } from 'node:crypto';
+import { backfillChunkSearch } from './backfill-chunk-search.mjs';
 
 const backend = fileURLToPath(new URL('../', import.meta.url));
 process.chdir(backend);
@@ -66,6 +67,8 @@ const report = { fecha: new Date().toISOString(), top: 6, metrica: 'Al menos un 
 const started = Date.now();
 try {
   const database = await db();
+  // También migra la copia persistida de evaluaciones anteriores, sin tocar chunks.
+  await backfillChunkSearch(database);
   // Las variantes repiten consultas SQL idénticas sobre un corpus inmutable.
   // Memoizar solo durante cada pregunta reduce el coste sin cambiar candidatos ni puntajes.
   const query = database.query.bind(database);
@@ -118,4 +121,8 @@ try {
   fs.writeFileSync(reportFile, JSON.stringify(report, null, 2) + '\n');
   console.log(JSON.stringify({ variantes: report.variantes, regresiones: report.regresiones, informe: reportFile }, null, 2));
   if (Object.values(report.regresiones).some(r => !r.correcto)) throw new Error('Falló una regresión de prioridad por ficha.');
+  if (hybrid && (report.variantes.reformulado_hibrido.originales30.aciertos < 29 ||
+    report.variantes.reformulado_hibrido.beneficios10.aciertos < 10)) {
+    throw new Error('Regresión de recuperación con stubs: se requieren al menos 29/30 y 10/10.');
+  }
 } finally { await closeDatabase(); }

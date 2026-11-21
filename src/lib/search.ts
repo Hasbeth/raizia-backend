@@ -6,6 +6,7 @@ import { all, tx } from "./db";
 import { embedQuery, embeddingModel, toPgvector } from "./embeddings";
 import { hydrateChunks } from "./storage";
 import { MARK_CLOSE, MARK_OPEN } from "./constants";
+import { createTimings, type Timings } from "./timings";
 
 const STOPWORDS = new Set(
   `a al algo algun alguna algunas alguno algunos ante antes aqui asi aun aunque bien cada casi como con contra cual cuales cuando cuanto de del desde donde dos el ella ellas ellos en entre era eran es esa esas ese eso esos esta estaba estan estar estas este esto estos fue fueron ha habia hace hacer hacemos hago han hasta hay la las le les lo los mas me mi mis mucho muy nada ni no nos nosotros nuestra nuestras nuestro nuestros o otra otras otro otros para pero poco por porque puede pueden puedo que quien quienes quiero se sea segun ser si sido sin sobre solo somos son soy su sus tal tambien tanto te tengo tenemos tiene tienen toda todas todo todos tu tus un una unas uno unos usted ustedes va van y ya yo debo debe deben decir dice dicen saber cuales favor hola gracias necesito quisiera explicame explica dime significa`.split(
@@ -287,19 +288,53 @@ export function reciprocalRankFusion(lists: number[][], k = 60): Map<number, num
   }
   return scores;
 }
-export async function lexicalCandidates(query: string, publicOnly = true): Promise<HitRow[]> {
+async function hasLexicalIndex(publicOnly: boolean): Promise<boolean> {
+  const [row] = await all<{ available: boolean }>(`SELECT EXISTS (
+    SELECT 1 FROM chunk_search s JOIN chunks c ON c.id=s.chunk_id
+    JOIN documents d ON d.id=c.document_id ${publicOnly ? "WHERE d.status='aprobado'" : ""}
+  ) AS available`);
+  return row.available;
+}
+
+async function topicDocumentIds(topicIds: number[]): Promise<Set<number>> {
+  if (!topicIds.length) return new Set();
+  const marks = topicIds.map(() => "?").join(",");
+  const rows = await all<{ document_id: number }>(`SELECT DISTINCT dc.document_id FROM document_categories dc
+    JOIN categories c ON c.id=dc.category_id WHERE c.id IN (${marks}) OR c.parent_id IN (${marks})`, ...topicIds, ...topicIds);
+  return new Set(rows.map(r => r.document_id));
+}
+
+export type SearchContext = { approvedDocumentIds: number[]; topicDocs: Set<number>; lexicalIndex: boolean };
+
+/** Contexto limitado a esta recuperación: no conserva aprobaciones obsoletas entre peticiones. */
+export async function prepareSearchContext(topicIds: number[]): Promise<SearchContext> {
+  const [documents, topicDocs, lexicalIndex] = await Promise.all([
+    all<{ id: number }>("SELECT id FROM documents WHERE status='aprobado'"),
+    topicDocumentIds(topicIds), hasLexicalIndex(true),
+  ]);
+  return { approvedDocumentIds: documents.map(d => d.id), topicDocs, lexicalIndex };
+}
+
+export async function lexicalCandidates(query: string, publicOnly = true, indexed?: boolean): Promise<HitRow[]> {
   const terms = queryTerms(query);
   if (!terms.length) return [];
   const synonyms = expand(terms);
   const match = ftsQuery([...new Set([...terms,...[...synonyms.values()].flat()])],"OR");
   const condition = publicOnly ? "AND d.status='aprobado'" : "";
-  // Primero limita dentro del índice de expresión; después obtiene fichas.
-  const primary = await all<HitRow>(`
-    SELECT ${COLUMNS}, hit.rank FROM (
+  // El respaldo se decide por biblioteca, no por coincidencias de esta consulta.
+  const useIndex = indexed ?? await hasLexicalIndex(publicOnly);
+  const candidates = useIndex ? `
+      SELECT chunk_id AS id, ts_rank_cd(tsv,to_tsquery('simple',$1)) AS rank
+      FROM chunk_search WHERE tsv @@ to_tsquery('simple',$1)
+      ORDER BY rank DESC,chunk_id LIMIT 3000` : `
       SELECT id, ts_rank_cd(to_tsvector('simple',f_fold(heading || ' ' || content)),to_tsquery('simple',$1)) AS rank
       FROM chunks WHERE content IS NOT NULL AND
         to_tsvector('simple',f_fold(heading || ' ' || content)) @@ to_tsquery('simple',$1)
-      ORDER BY rank DESC,id LIMIT 3000
+      ORDER BY rank DESC,id LIMIT 3000`;
+  // Primero limita usando el tsv almacenado; después obtiene fragmentos y fichas.
+  const primary = await all<HitRow>(`
+    SELECT ${COLUMNS}, hit.rank FROM (
+      ${candidates}
     ) hit JOIN chunks c ON c.id=hit.id JOIN documents d ON d.id=c.document_id
     WHERE true ${condition} ORDER BY hit.rank DESC,c.id`,match);
   // Las masivas solo consultan sus fichas en GIN; nunca se descarga un corpus para buscar.
@@ -318,33 +353,31 @@ export async function lexicalCandidates(query: string, publicOnly = true): Promi
   }
   return [...unique.values()];
 }
-export async function vectorCandidates(vector: Float32Array, model: string): Promise<HitRow[]> {
+export async function vectorCandidates(vector: Float32Array, model: string, approvedDocumentIds?: number[]): Promise<HitRow[]> {
   return tx(async database => {
     // El bloque maneja parámetros ausentes sin dejar abortada la transacción local.
     await database.exec(`DO $$ BEGIN
-      PERFORM set_config('hnsw.ef_search', '200', true);
+      PERFORM set_config('hnsw.ef_search', '320', true);
       PERFORM set_config('hnsw.iterative_scan', 'relaxed_order', true);
     EXCEPTION WHEN undefined_object OR invalid_parameter_value OR feature_not_supported THEN NULL;
     END $$;`);
-    const documents = await database.query<{ id: number; weight: number }>(
-      "SELECT id,weight FROM documents WHERE status='aprobado'",
-    );
-    const candidates = async (ids: number[], limit: number, main: boolean) => {
-      if (!ids.length) return [];
+    const ids = approvedDocumentIds ?? (await database.query<{ id: number }>(
+      "SELECT id FROM documents WHERE status='aprobado'",
+    )).map(d => d.id);
+    if (!ids.length) return [];
       // El ORDER BY interior debe ser solo el operador de distancia para usar HNSW.
-      // ANY filtra dentro del escaneo iterativo; el JOIN no reduce el cupo después.
-      return database.query<HitRow>(`SELECT ${COLUMNS},c.rank FROM (
+      // + 0 impide elegir el índice de document_id en vez de HNSW; ANY filtra el escaneo iterativo.
+      const candidates = await database.query<HitRow>(`SELECT ${COLUMNS},c.rank FROM (
         SELECT id,document_id,ord,heading,content,embedding <=> $1::halfvec(384) AS rank
         FROM chunks WHERE embedding IS NOT NULL AND embedding_model=$2
-          AND document_id = ANY($3::integer[])
-        ORDER BY embedding <=> $1::halfvec(384) LIMIT $4
+          AND (document_id + 0) = ANY($3::integer[])
+        ORDER BY embedding <=> $1::halfvec(384) LIMIT 320
       ) c JOIN documents d ON d.id=c.document_id
-      WHERE d.status='aprobado' ${main ? "AND d.weight>=1" : ""}
-      ORDER BY c.rank + 0,c.id`, [toPgvector(vector), model, `{${ids.join(",")}}`, limit]);
-    };
-    // Secuenciales: las dos consultas comparten la conexión y los SET LOCAL.
-    const general = await candidates(documents.map(d => d.id), 180, false);
-    const main = await candidates(documents.filter(d => d.weight >= 1).map(d => d.id), 60, true);
+      WHERE d.status='aprobado'
+      ORDER BY c.rank + 0,c.id`, [toPgvector(vector), model, `{${ids.join(",")}}`]);
+    const ordered = candidates.sort((a,b) => a.rank-b.rank || a.chunk_id-b.chunk_id);
+    const general = ordered.slice(0,180);
+    const main = ordered.filter(r => r.weight>=1).slice(0,60);
     return [...new Map([...general,...main].sort((a,b) => a.rank-b.rank || a.chunk_id-b.chunk_id)
       .map(r => [r.chunk_id,r])).values()];
   });
@@ -352,14 +385,24 @@ export async function vectorCandidates(vector: Float32Array, model: string): Pro
 
 export async function searchChunks(
   query: string,
-  opts: { topicIds?: number[]; limit?: number; boostText?: string; publicOnly?: boolean; perDocument?: number; hydrate?: boolean; documentIds?: number[] } = {},
+  opts: { topicIds?: number[]; limit?: number; boostText?: string; publicOnly?: boolean; perDocument?: number; hydrate?: boolean; documentIds?: number[];
+    context?: SearchContext; vector?: Float32Array | null; timings?: Timings } = {},
 ): Promise<Hit[]> {
   const terms = queryTerms(query);
   if (!terms.length) return [];
   const limit = opts.limit ?? 6;
   const synonyms = expand(terms);
-  const [lexical,vector,cards] = await Promise.all([lexicalCandidates(query,opts.publicOnly ?? true),embedQuery(query),matchingDocumentCandidates(query,opts.publicOnly ?? true)]);
-  const semantic = vector ? await vectorCandidates(vector,embeddingModel()) : [];
+  const timings = opts.timings ?? createTimings();
+  const [[lexical,cards],semantic] = await Promise.all([
+    timings.measure("lexica", () => Promise.all([
+      lexicalCandidates(query,opts.publicOnly ?? true, opts.publicOnly === false ? undefined : opts.context?.lexicalIndex),
+      matchingDocumentCandidates(query,opts.publicOnly ?? true),
+    ])),
+    (async () => {
+      const vector = opts.vector !== undefined ? opts.vector : await timings.measure("embeddings", () => embedQuery(query));
+      return vector ? timings.measure("vectorial", () => vectorCandidates(vector,embeddingModel(),opts.context?.approvedDocumentIds)) : [];
+    })(),
+  ]);
   const fused = reciprocalRankFusion([lexical.map(r => r.chunk_id),semantic.map(r => r.chunk_id),cards.map(r => r.chunk_id)]);
   const semanticIds = new Set(semantic.map(r => r.chunk_id));
   const candidates = [...new Map([...lexical,...semantic,...cards].map(r => [r.chunk_id,r])).values()];
@@ -370,13 +413,7 @@ export async function searchChunks(
   const rows = [...new Map([...pool.slice(0,Math.max(120,limit*10)),
     ...pool.filter(r => r.weight>=1).slice(0,Math.max(60,limit*3)),
     ...pool.filter(r => documentMatch(query,r.title))].map(r => [r.chunk_id,r])).values()];
-  const topicDocs = new Set<number>();
-  if (opts.topicIds?.length) {
-    const marks = opts.topicIds.map(() => "?").join(",");
-    const ids = await all<{ document_id: number }>(`SELECT DISTINCT dc.document_id FROM document_categories dc
-      JOIN categories c ON c.id=dc.category_id WHERE c.id IN (${marks}) OR c.parent_id IN (${marks})`,...opts.topicIds,...opts.topicIds);
-    ids.forEach(r => topicDocs.add(r.document_id));
-  }
+  const topicDocs = opts.context?.topicDocs ?? await topicDocumentIds(opts.topicIds ?? []);
   const generic = ["pueblo","comunidad","resguardo","municipio","indigena"];
   const boostTerms = (fold(opts.boostText || "").match(/[a-z0-9]{4,}/g) || []).filter(w => !STOPWORDS.has(w) && !generic.includes(w));
   const scored = rows.map(r => {
@@ -398,8 +435,10 @@ export async function searchChunks(
     .sort((a,b) => b.score-a.score);
   const out = selectHits(relevant as Hit[],limit,opts.perDocument ?? 2,3);
   // Solo aquí se recuperan los JSON completos de los documentos seleccionados.
-  if (opts.hydrate !== false) return (await hydrateChunks(out)).filter(h => h.content.length>0);
-  return out as Hit[];
+  const result = opts.hydrate !== false
+    ? (await timings.measure("hidratacion", () => hydrateChunks(out))).filter(h => h.content.length>0) : out as Hit[];
+  if (!opts.timings) timings.report();
+  return result;
 }
 
 export async function searchDocumentsByContent(query: string, publicOnly: boolean, documentIds?: number[]) {
