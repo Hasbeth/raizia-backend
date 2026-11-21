@@ -139,3 +139,13 @@ data/          base SQLite y archivos originales
 Ejecuta `npm test`, `npx tsc --noEmit`, `npx eslint` y `npm run build`. Se mantienen las 160 pruebas originales y se añaden pruebas de reglas, deduplicación, estimación, embeddings y reconstrucción con SQLite aislado. Las pruebas de embeddings simulan HTTP y el reloj; no llaman a Gemini ni leen claves.
 
 `data/` **no se versiona**; necesita un respaldo aparte, junto con los archivos de `data/files/`. Tampoco se versionan `node_modules/`, `.next/` ni `.env*`, salvo `.env.example`.
+
+## Producción (noviembre de 2026)
+
+- **Modelo:** `GEMINI_MODEL=gemini-3.1-flash-lite` en Vercel. Se eligió por latencia (1–3 s frente a 10–45 s de `gemini-3.5-flash` en la medición del 2026-11-21).
+- **Búsqueda:** índice HNSW `idx_chunks_embedding_hnsw` y tabla léxica `chunk_search`, mantenida por el trigger `trg_chunk_search`. Para rellenarla: `node scripts/backfill-chunk-search.mjs`.
+- **Artículos partidos:** el contexto une los fragmentos contiguos del mismo artículo (`src/lib/article-context.ts`).
+- **Esquema:** `supabase/schema.sql` es una migración explícita; en producción nunca se ejecuta al arrancar.
+- **Límite del chat:** 12/min y 80/día por IP y 1500/día global. Se ajusta con `CHAT_LIMIT_IP_PER_MINUTE`, `CHAT_LIMIT_IP_PER_DAY` y `CHAT_LIMIT_GLOBAL_PER_DAY`. La IP solo se guarda como hash.
+- **Tiempos por etapa:** `RAIZIA_TIEMPOS=1` los registra sin datos personales.
+- **Espacio:** vigilar el límite de 500 MB del plan gratis; el índice HNSW ocupa 137 MB.
