@@ -13,6 +13,8 @@ const {applySchema,createDatabase}=await import('../../scripts/lib/database.mjs'
 const {createDocument,getDocument,getDocumentChunks,updateDocument,deleteDocument,listDocuments,hydrateLibraryPage}=await import('../../src/lib/documents.ts');
 const {searchChunks,vectorCandidates,reciprocalRankFusion}=await import('../../src/lib/search.ts');
 const {getSpace,calculatePending,validCron}=await import('../../src/lib/maintenance.ts');
+const {cleanRateLimits}=await import('../../src/lib/maintenance.ts');
+const {checkChatLimit}=await import('../../src/lib/rate-limit.ts');
 const {toPgvector}=await import('../../src/lib/embeddings.ts');
 const {readViewer}=await import('../../src/lib/storage.ts');
 const {GET:library}=await import('../../src/rutas/library/route.ts');
@@ -25,6 +27,23 @@ const {float32ToBlob}=await import('../../scripts/lib/embeddings-core.mjs');
 const text='La comunidad indígena presenta una petición de acceso al agua y exige una respuesta de la autoridad. La protección del territorio y la consulta previa orientan la participación de sus habitantes. ';
 try {
  const database=await db(); await applySchema(database);
+ const rateRls=await query("SELECT relrowsecurity FROM pg_class WHERE relname='rate_limits'");
+ assert.equal(rateRls[0].relrowsecurity,true);
+ assert.equal((await query("SELECT * FROM pg_policies WHERE tablename='rate_limits'")).length,0);
+ const rateRequest=new Request('http://localhost/api/chat',{headers:{'x-forwarded-for':'203.0.113.42, 10.0.0.1'}});
+ const rateNow=new Date('2026-11-21T12:00:00Z');
+ const concurrent=await Promise.all(Array.from({length:20},()=>checkChatLimit(rateRequest,rateNow)));
+ assert.equal(concurrent.filter(r=>r.allowed).length,12,'Incrementos atómicos concurrentes en PGlite');
+ const savedRates=await query('SELECT bucket,count FROM rate_limits');
+ assert.equal(savedRates.find(r=>r.bucket.startsWith('chat:minute:')).count,20);
+ assert.ok(!JSON.stringify(savedRates).includes('203.0.113.42'));
+ await tx(async()=>{
+   await query("INSERT INTO rate_limits VALUES('old',CURRENT_TIMESTAMP-interval '3 days',1),('edge',CURRENT_TIMESTAMP-interval '2 days',1),('fresh',CURRENT_TIMESTAMP,1)");
+   await cleanRateLimits();
+   assert.equal((await query("SELECT bucket FROM rate_limits WHERE bucket='old'")).length,0);
+   assert.equal((await query("SELECT bucket FROM rate_limits WHERE bucket IN ('edge','fresh')")).length,2);
+ });
+ await query('DELETE FROM rate_limits');
  assert.equal((await query("SELECT extname FROM pg_extension WHERE extname='vector'")).length,1);
  assert.equal((await query("SELECT f_fold('ÁRBOL Ñandú PETICIÓN') v"))[0].v,'arbol nandu peticion');
  const rls=await query("SELECT relname,relrowsecurity FROM pg_class WHERE relname IN ('documents','chunks','categories','document_categories')");

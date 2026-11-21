@@ -1,5 +1,27 @@
 # Pruebas de RAIZIA · Backend
 
+Límite de `/api/chat`: `CHAT_LIMIT_IP_PER_MINUTE` (12),
+`CHAT_LIMIT_IP_PER_DAY` (80) y `CHAT_LIMIT_GLOBAL_PER_DAY` (1500).
+Aceptan enteros positivos. Las ventanas usan UTC; los saludos no consumen cupo.
+La sal usa el `CRON_SECRET` existente; solo `RAIZIA_MODO=local` permite la sal fija.
+Si no se puede contar, se permite continuar y se registra un mensaje sin datos
+personales. La tarea de mantenimiento elimina ventanas de más de dos días.
+
+`vector-index.test.mjs` comprueba la forma de consulta compatible con HNSW,
+los filtros, cupos y transacción secuencial. `rate-limit.test.mjs` cubre los
+límites, el hash de IP, el respaldo de cabeceras, fail-open y la respuesta 429.
+La integración PGlite comprueba esquema idempotente, RLS sin políticas,
+incrementos concurrentes y limpieza con el límite exacto de dos días.
+
+Para compilar sin que Next lea archivos de entorno, ejecutar
+`node tests/support/prepare-offline-build.mjs`. Imprime una copia aislada dentro
+de `.verification/`, con el código y un enlace al `node_modules` instalado.
+Ejecutar allí `npm.cmd run build` con `NODE_OPTIONS=--require` y la ruta absoluta
+a `tests/support/offline.cjs`, además de las variables locales indicadas abajo.
+La precarga bloquea archivos de entorno, HTTP y TCP externo; permite el canal
+local que usan los workers de Turbopack. Borrar la copia después de verificarla
+para que TypeScript y ESLint no recorran artefactos generados.
+
 Ejecutar `npm test` con Node.js 26. En PowerShell con scripts deshabilitados,
 usar `npm.cmd test`. El comando ejecuta `tests/*.test.mjs` sin iniciar servidores,
 leer archivos de entorno ni acceder a la base original.

@@ -42,6 +42,13 @@ CREATE INDEX IF NOT EXISTS idx_chunks_lexical ON chunks USING gin
   (to_tsvector('simple', f_fold(heading || ' ' || content))) WHERE content IS NOT NULL;
 CREATE INDEX IF NOT EXISTS idx_chunks_content_hash ON chunks(content_hash);
 CREATE INDEX IF NOT EXISTS idx_chunks_pending ON chunks(id) WHERE embedding IS NULL;
+-- Algunas compilaciones de pgvector para PGlite no incluyen HNSW/halfvec.
+-- EXCEPTION usa una subtransacción: el resto del esquema sigue disponible.
+DO $$ BEGIN
+  CREATE INDEX IF NOT EXISTS idx_chunks_embedding_hnsw ON chunks
+    USING hnsw (embedding halfvec_cosine_ops) WITH (m=12, ef_construction=48);
+EXCEPTION WHEN feature_not_supported OR undefined_object OR undefined_function THEN NULL;
+END $$;
 CREATE TABLE IF NOT EXISTS storage_objects (
   bucket text NOT NULL, path text NOT NULL, bytes bigint NOT NULL, content_hash text NOT NULL,
   updated_at timestamptz NOT NULL DEFAULT CURRENT_TIMESTAMP, PRIMARY KEY(bucket,path)
@@ -49,10 +56,15 @@ CREATE TABLE IF NOT EXISTS storage_objects (
 CREATE TABLE IF NOT EXISTS maintenance_jobs (
   name text PRIMARY KEY, owner text NOT NULL, expires_at timestamptz NOT NULL
 );
+CREATE TABLE IF NOT EXISTS rate_limits (
+  bucket text NOT NULL, window_start timestamptz NOT NULL, count int NOT NULL,
+  PRIMARY KEY(bucket, window_start)
+);
 ALTER TABLE categories ENABLE ROW LEVEL SECURITY;
 ALTER TABLE documents ENABLE ROW LEVEL SECURITY;
 ALTER TABLE document_categories ENABLE ROW LEVEL SECURITY;
 ALTER TABLE chunks ENABLE ROW LEVEL SECURITY;
 ALTER TABLE storage_objects ENABLE ROW LEVEL SECURITY;
 ALTER TABLE maintenance_jobs ENABLE ROW LEVEL SECURITY;
+ALTER TABLE rate_limits ENABLE ROW LEVEL SECURITY;
 -- Sin políticas públicas: solo conexión del backend/servicio.

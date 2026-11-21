@@ -2,7 +2,7 @@
  * Búsqueda híbrida sobre Postgres/pgvector y detección de temáticas.
  * Fusión RRF con degradación léxica si el proveedor de embeddings no está disponible.
  */
-import { all } from "./db";
+import { all, tx } from "./db";
 import { embedQuery, embeddingModel, toPgvector } from "./embeddings";
 import { hydrateChunks } from "./storage";
 import { MARK_CLOSE, MARK_OPEN } from "./constants";
@@ -319,15 +319,35 @@ export async function lexicalCandidates(query: string, publicOnly = true): Promi
   return [...unique.values()];
 }
 export async function vectorCandidates(vector: Float32Array, model: string): Promise<HitRow[]> {
-  const sql = `SELECT ${COLUMNS},(c.embedding <=> $1::halfvec(384)) AS rank
-    FROM chunks c JOIN documents d ON d.id=c.document_id
-    WHERE d.status='aprobado' AND c.embedding IS NOT NULL AND c.embedding_model=$2`;
-  const params = [toPgvector(vector),model] as const;
-  const [general,main] = await Promise.all([
-    all<HitRow>(sql+" ORDER BY rank,c.id LIMIT 180",...params),
-    all<HitRow>(sql+" AND d.weight>=1 ORDER BY rank,c.id LIMIT 60",...params),
-  ]);
-  return [...new Map([...general,...main].sort((a,b) => a.rank-b.rank).map(r => [r.chunk_id,r])).values()];
+  return tx(async database => {
+    // El bloque maneja parámetros ausentes sin dejar abortada la transacción local.
+    await database.exec(`DO $$ BEGIN
+      PERFORM set_config('hnsw.ef_search', '200', true);
+      PERFORM set_config('hnsw.iterative_scan', 'relaxed_order', true);
+    EXCEPTION WHEN undefined_object OR invalid_parameter_value OR feature_not_supported THEN NULL;
+    END $$;`);
+    const documents = await database.query<{ id: number; weight: number }>(
+      "SELECT id,weight FROM documents WHERE status='aprobado'",
+    );
+    const candidates = async (ids: number[], limit: number, main: boolean) => {
+      if (!ids.length) return [];
+      // El ORDER BY interior debe ser solo el operador de distancia para usar HNSW.
+      // ANY filtra dentro del escaneo iterativo; el JOIN no reduce el cupo después.
+      return database.query<HitRow>(`SELECT ${COLUMNS},c.rank FROM (
+        SELECT id,document_id,ord,heading,content,embedding <=> $1::halfvec(384) AS rank
+        FROM chunks WHERE embedding IS NOT NULL AND embedding_model=$2
+          AND document_id = ANY($3::integer[])
+        ORDER BY embedding <=> $1::halfvec(384) LIMIT $4
+      ) c JOIN documents d ON d.id=c.document_id
+      WHERE d.status='aprobado' ${main ? "AND d.weight>=1" : ""}
+      ORDER BY c.rank + 0,c.id`, [toPgvector(vector), model, `{${ids.join(",")}}`, limit]);
+    };
+    // Secuenciales: las dos consultas comparten la conexión y los SET LOCAL.
+    const general = await candidates(documents.map(d => d.id), 180, false);
+    const main = await candidates(documents.filter(d => d.weight >= 1).map(d => d.id), 60, true);
+    return [...new Map([...general,...main].sort((a,b) => a.rank-b.rank || a.chunk_id-b.chunk_id)
+      .map(r => [r.chunk_id,r])).values()];
+  });
 }
 
 export async function searchChunks(

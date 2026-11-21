@@ -1,6 +1,7 @@
 import type { ChatEvent } from "@/lib/constants";
 import { suggestTool } from "@/lib/tools-config";
 import { generateAnswer, isSmallTalk, ollamaStatus, retrieve, STATIC_GREETING } from "@/lib/rag";
+import { checkChatLimit, CHAT_LIMIT_MESSAGE } from "@/lib/rate-limit";
 export const runtime = "nodejs";
 export const maxDuration = 300;
 export const dynamic = "force-dynamic";
@@ -13,6 +14,14 @@ export async function POST(req: Request) {
     const message = String(body?.message || "").trim().slice(0, 1500);
     if (!message) {
         return Response.json({ error: "Escribe una consulta." }, { status: 400 });
+    }
+    const smallTalk = isSmallTalk(message);
+    if (!smallTalk) {
+        const limit = await checkChatLimit(req);
+        if (!limit.allowed) return Response.json({ message: CHAT_LIMIT_MESSAGE }, {
+            status: 429,
+            headers: { "Retry-After": String(limit.retryAfter), "Cache-Control": "no-store" },
+        });
     }
     const history: Turn[] = (Array.isArray(body?.history) ? body.history : [])
         .filter((m: Turn) => (m?.role === "user" || m?.role === "assistant") && typeof m?.content === "string" && m.content)
@@ -34,7 +43,6 @@ export async function POST(req: Request) {
             const send = (e: ChatEvent) => controller.enqueue(encoder.encode(JSON.stringify(e.type === "meta" ? { ...e, subtemas } : e) + "\n"));
             try {
                 // Saludos y charla breve no necesitan buscar; el resto siempre pasa por la biblioteca.
-                const smallTalk = isSmallTalk(message);
                 const retrieval = smallTalk
                     ? { topics: [], hits: [], sources: [], subtemas: [], reformulation: null, clarification: null }
                     : await retrieve(message, previousUser, profile, history, { signal: req.signal });

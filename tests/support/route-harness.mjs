@@ -7,14 +7,14 @@ const ts = require("typescript");
 const root = new URL("../../src/rutas/", import.meta.url);
 
 // Evalúa los handlers reales con adaptadores explícitos; nunca importa SQLite ni .env.local.
-export function routeHarness({ documents = {}, auth = {}, rag = {}, tools = {} } = {}) {
+export function routeHarness({ documents = {}, auth = {}, rag = {}, tools = {}, rateLimit = { checkChatLimit: async () => ({ allowed: true, retryAfter: 0 }) } } = {}) {
   const strict = (adapter) => new Proxy(adapter, {
     get(target, key) {
       if (!(key in target)) throw new Error(`Dependencia inesperada: ${String(key)}`);
       return target[key];
     },
   });
-  const adapters = { "@/lib/documents": strict(documents), "@/lib/auth": strict(auth), "@/lib/rag": strict(rag), "@/lib/tools-config": strict(tools) };
+  const adapters = { "@/lib/documents": strict(documents), "@/lib/auth": strict(auth), "@/lib/rag": strict(rag), "@/lib/tools-config": strict(tools), "@/lib/rate-limit": strict(rateLimit) };
   return (name) => {
     const path = fileURLToPath(new URL(`${name}/route.ts`, root));
     const code = ts.transpileModule(readFileSync(path, "utf8"), {

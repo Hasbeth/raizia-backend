@@ -11,7 +11,11 @@ export function validCron(request:Request):boolean {
   return a.length===b.length && timingSafeEqual(a,b);
 }
 type Pending={id:number;documentId:number;ord:number;content:string|null;content_hash:string};
+export async function cleanRateLimits() {
+  await query("DELETE FROM rate_limits WHERE window_start < CURRENT_TIMESTAMP - interval '2 days'");
+}
 export async function calculatePending({budgetMs=240_000,maxTexts=320,signal}:{budgetMs?:number;maxTexts?:number;signal?:AbortSignal}={}) {
+  await cleanRateLimits();
   const start=Date.now(); const owner=randomUUID(); const model=embeddingModel();
   const lease=await query(`INSERT INTO maintenance_jobs(name,owner,expires_at) VALUES('embeddings',$1,CURRENT_TIMESTAMP+interval '270 seconds')
     ON CONFLICT(name) DO UPDATE SET owner=excluded.owner,expires_at=excluded.expires_at
