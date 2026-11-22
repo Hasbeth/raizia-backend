@@ -122,11 +122,15 @@ export async function verifyAnswer(text: string, hits: Hit[], ask?: Verification
   const claims = splitClaims(text).slice(0, 60);
   const verified = await verifyInStages(claims, hits, ask, signal);
   const legal: string[] = [], context: string[] = [];
-  let heading = "";
+  let heading = "", section = "";
   for (const claim of verified) {
     const plain = plainHeading(claim.text);
-    if (HEADINGS.includes(plain)) { heading = plain; continue; }
-    if (!claim.citations.length && !isGuidance(claim.text)) continue;
+    if (HEADINGS.includes(plain)) { heading = plain; section = plain; continue; }
+    // Un paso práctico sin norma, cifra ni plazo se conserva sin cita: quitarlo deja a la persona sin saber qué hacer.
+    const practical = section === "Qué hacer" && !/\b(?:ley|decreto|sentencia|art[ií]culo|plazo|\d+)\b/i.test(claim.text.replace(/^\s*\d+[.)]\s*/, ""));
+    if (!claim.citations.length && !isGuidance(claim.text) && !practical) continue;
+    // Una pregunta final no abre una sección vacía.
+    if (/\?\s*\**$/.test(claim.text) && !claim.citations.length) { legal.push(claim.text); continue; }
     const destination = claim.citations.some(n => sourceKind(hits[n - 1]) === "contexto") ? context : legal;
     if (destination === legal && heading) { legal.push(`**${heading}**`); heading = ""; }
     destination.push(renderClaim(claim, hits));

@@ -209,3 +209,13 @@ test('PGlite real: filtros de población antes del cupo y búsqueda separada de 
     assert.deepEqual(contexts.map(h=>h.documentId),[4]);
   } finally { await database.close(); }
 });
+
+test('Conserva pasos prácticos sin cita y no deja secciones vacías', async () => {
+  const source = hit(1);
+  const out = await verifyAnswer('**Qué hacer**\nLleva tus documentos al juzgado más cercano.\n¿Ya hablaste con la entidad?', [source]);
+  assert.match(out, /\*\*Qué hacer\*\*/); assert.match(out, /Lleva tus documentos/);
+  const inventado = await verifyAnswer('**Qué hacer**\nTienes un plazo de 30 días según la Ley 9999.', [source]);
+  assert.doesNotMatch(inventado, /9999/);
+  const vacia = await verifyAnswer('**Qué necesitas**\n¿Ya hablaste con la entidad?', [source]);
+  assert.doesNotMatch(vacia, /Qué necesitas/); assert.match(vacia, /¿Ya hablaste/);
+});
