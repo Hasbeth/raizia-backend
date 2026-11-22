@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { PETICION, TOOL_LIST, TOOLS, TUTELA, suggestEntities, suggestTool, toolBySlug, validateTool } from "../src/lib/tools-config.ts";
+import { PETICION, TOOL_LIST, TOOLS, TUTELA, stepApplies, suggestEntities, suggestTool, toolBySlug, validateTool } from "../src/lib/tools-config.ts";
 
 function datosValidos(config) {
   const datos = { telefono: "3001234567" };
@@ -36,7 +36,7 @@ for (const config of TOOL_LIST) {
     const copia = structuredClone(datos);
     assert.deepEqual(validateTool(config, datos), {}, "Los datos completos y el teléfono deben bastar.");
     assert.deepEqual(datos, copia, "La validación no debe modificar los datos recibidos.");
-    const obligatorios = config.steps.flatMap((paso) => paso.fields).filter((campo) => campo.required);
+    const obligatorios = config.steps.filter(paso => stepApplies(paso, datos)).flatMap((paso) => paso.fields).filter((campo) => campo.required);
     for (const campo of obligatorios) {
       for (const vacio of [undefined, "", " \t\n ", []]) {
         const incompletos = { ...datos, [campo.name]: vacio };
@@ -61,7 +61,7 @@ for (const [nombre, datos] of [
 ]) {
   test(`Contacto: rechaza ${nombre}`, () => {
     for (const config of TOOL_LIST) {
-      assert.deepEqual(validateTool(config, datos, "contacto"), { direccion: "Indica al menos un medio de contacto." }, "Debe pedir al menos un medio de contacto en cada herramienta.");
+      assert.deepEqual(validateTool(config, datos, "contacto"), { [config.kind === "tutela" ? "correo" : "direccion"]: "Indica al menos un medio de contacto." }, "Debe pedir al menos un medio de contacto en cada herramienta.");
     }
   });
 }
@@ -69,7 +69,7 @@ for (const [nombre, datos] of [
 for (let mascara = 1; mascara < 8; mascara += 1) {
   const datos = Object.fromEntries(Object.entries({ direccion: "Resguardo, casa del cabildo", correo: "ana@ejemplo.co", telefono: "3001234567" }).filter((_, indice) => mascara & (1 << indice)));
   test(`Contacto: acepta ${Object.keys(datos).join(" y ")}`, () => {
-    for (const config of TOOL_LIST) assert.deepEqual(validateTool(config, datos, "contacto"), {}, "Cualquier combinación no vacía de contactos válidos es suficiente.");
+    for (const config of TOOL_LIST) assert.deepEqual(validateTool(config, datos, "contacto"), config.kind === "tutela" && !datos.correo && !datos.telefono ? { correo: "Indica al menos un medio de contacto." } : {}, "Tutela pide correo o teléfono; las demás herramientas mantienen sus contactos.");
   });
 }
 

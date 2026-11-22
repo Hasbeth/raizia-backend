@@ -11,7 +11,7 @@ export const caseData = {
   tipoPeticion: 'Solicitud de información', accionado: 'ENTIDAD FICTICIA', contactoAccionado: 'entidad@example.invalid',
   actuaciones: 'El 2026-11-03 pedí una respuesta y fue negada.', lugarHechos: 'MUNICIPIO FICTICIO',
   cuando: 'El 2026-11-02', motivoAhora: 'sigue la falta de respuesta indicada', otrosMedios: 'Solicité revisión sin obtener respuesta.',
-  relacionAccionado: 'La entidad ficticia conserva el registro solicitado.', peligro: 'No solicito protección transitoria.', proteccionEspecial: 'No aplica.',
+  relacionAccionado: 'La entidad ficticia conserva el registro solicitado.', medidaProvisional: 'No', peligro: 'No solicito protección transitoria.', proteccionEspecial: 'No aplica.',
   derechos: ['Derecho de petición (artículo 23 de la Constitución)'], explicacion: 'No recibí la respuesta de fondo solicitada.',
   pruebas: 'Copia de solicitud ficticia\nRespuesta ficticia', demuestra: 'Que pedí una copia\nQue negaron la copia',
   responsables: 'ENTIDAD FICTICIA', plazos: 'El plazo que solicito es 2 días', verificaciones: 'Recibir la copia legible', hechosApoyo: '1, 2', pruebasApoyo: '1, 2',

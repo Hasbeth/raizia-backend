@@ -66,8 +66,8 @@ test('Desacato e impugnación: hechos, pedidos, fundamentos y distinción de cam
 test('Revisión: rojo solo datos inválidos; debilidades amarillas por cada pretensión', () => {
   assert.equal(reviewQuality('peticion', {}).level, 'red');
   assert.equal(reviewQuality('peticion', caseData).level, 'green');
-  const weak = reviewQuality('tutela', { ...caseData, hechos: 'La entidad negó la solicitud.', pretensiones: 'Que me ayuden', actuaciones: 'No', pruebasApoyo: '9', hechosApoyo: '', plazos: '' });
-  assert.equal(weak.level, 'amber');
+  const weak = reviewQuality('tutela', { ...caseData, cuando: '', hechos: 'La entidad negó la solicitud.', pretensiones: 'Que me ayuden', actuaciones: 'No', pruebasApoyo: '9', hechosApoyo: '', plazos: '' });
+  assert.equal(weak.level, 'red');
   for (const field of ['hechos', 'pretensiones', 'actuaciones', 'pruebasApoyo', 'hechosApoyo', 'plazos']) assert.ok(weak.issues.some(i => i.field === field), field);
   const multiple = reviewQuality('tutela', { ...caseData, pretensiones: `${caseData.pretensiones}\nQue se entregue otro documento ficticio.` });
   assert.ok(multiple.issues.some(i => i.message.includes('Pedido 2') && i.field === 'pruebasApoyo'));
