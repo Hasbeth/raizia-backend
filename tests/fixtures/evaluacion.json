@@ -416,5 +416,43 @@
         "territory": ""
       }
     }
+  ],
+  "rutas_raizia": [
+    {
+      "tema": "discriminacion",
+      "pregunta": "Un policía me insultó por ser indígena, ¿a dónde denuncio?"
+    },
+    {
+      "tema": "discriminacion",
+      "pregunta": "Me discriminan por ser negro en una oficina pública"
+    },
+    {
+      "tema": "discriminacion",
+      "pregunta": "Un agente abusó de su autoridad y me humilló"
+    },
+    {
+      "tema": "salud",
+      "pregunta": "La EPS no me da transporte"
+    },
+    {
+      "tema": "salud",
+      "pregunta": "Vivo en un resguardo alejado y no me entregan medicamentos"
+    },
+    {
+      "tema": "salud",
+      "pregunta": "Me remitieron a otra ciudad y no puedo viajar a la cita"
+    },
+    {
+      "tema": "educacion",
+      "pregunta": "No me dieron cupo en la universidad por ser indígena"
+    },
+    {
+      "tema": "educacion",
+      "pregunta": "Necesito ayuda con ICETEX para seguir estudiando"
+    },
+    {
+      "tema": "educacion",
+      "pregunta": "En la escuela no hay docente para nuestra comunidad"
+    }
   ]
 }

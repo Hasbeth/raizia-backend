@@ -47,7 +47,7 @@ export async function POST(req: Request) {
                 // La reformulación clasifica antes de consultar la biblioteca.
                 const retrieval = smallTalk
                     ? { topics: [], hits: [], sources: [], subtemas: [], reformulation: null, clarification: null, reply: smallTalkReply(message, history) }
-                    : await retrieve(message, previousUser, profile, history, { signal: req.signal });
+                    : await retrieve(message, previousUser, profile, history, { signal: req.signal, reformulate: async () => null });
                 const { topics, hits, sources, reformulation, clarification } = retrieval;
                 subtemas = retrieval.subtemas;
                 if (retrieval.reply) {
@@ -83,11 +83,11 @@ export async function POST(req: Request) {
                                 send({ type: "token", text });
                             }
                         }
-                        catch (e) {
+                        catch {
                             if (req.signal.aborted)
                                 return;
-                            console.error("[chat] Ollama:", e);
-                            send({ type: "error", message: "La IA local dejó de responder. Intenta de nuevo en un momento." });
+                            console.error("[chat] Generación no disponible");
+                            send({ type: "error", message: "No pude responder en este momento. Intenta de nuevo." });
                         }
                     }
                     else if (smallTalk) {
@@ -118,19 +118,19 @@ export async function POST(req: Request) {
                         send({ type: "token", text });
                     }
                 }
-                catch (e) {
+                catch {
                     if (req.signal.aborted)
                         return;
                     send({
                         type: "error",
-                        message: "La IA local dejó de responder. Abajo quedan los documentos encontrados para que puedas consultarlos directamente.",
+                        message: "No pude redactar la respuesta en este momento. Intenta de nuevo; abajo quedan los documentos encontrados.",
                     });
-                    console.error("[chat] Ollama:", e);
+                    console.error("[chat] Generación no disponible");
                 }
                 send({ type: "done" });
             }
-            catch (e) {
-                console.error("[chat]", e);
+            catch {
+                console.error("[chat] Búsqueda no disponible");
                 send({ type: "error", message: "Ocurrió un problema al buscar en la biblioteca. Intenta de nuevo." });
                 send({ type: "done" });
             }

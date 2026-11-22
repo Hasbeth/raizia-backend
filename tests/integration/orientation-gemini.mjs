@@ -19,7 +19,7 @@ globalThis.fetch = async (url, options) => {
     orientationAttempts++;
     assert.deepEqual(body.generationConfig.responseSchema.required,['entendi','hechos_faltantes','preguntas','urgencia','rutas']);
     assert.equal(input.identidad.groups[0],'narp');
-    result = orientationAttempts === 1 ? {} : { entendi:[input.relato], hechos_faltantes:['Conducta'], preguntas:[{texto:'¿Qué hizo o dijo?'}], urgencia:'normal', rutas:[] };
+    result = { entendi:[input.relato], hechos_faltantes:['Conducta'], preguntas:[{texto:'¿Qué hizo o dijo?'}], urgencia:'normal', rutas:[] };
   }
   return Response.json({candidates:[{content:{parts:[{text:JSON.stringify(result)}]}}]});
 };
@@ -28,13 +28,15 @@ const { orientWithLibrary } = await import('../../src/lib/orientation.ts');
 const profile = Object.freeze({group:'Pueblo indígena',community:'Nasa',territory:''});
 const text = 'Un policía me está discriminando por ser negro';
 const result = await orientWithLibrary({ text, profile }, { retrieve:async()=>({hits:[source],sources:[{...source,n:1}],topics:[],subtemas:[],reformulation:null,clarification:null}), ask:askGeminiJSON });
-assert.equal(result.fallback,false); assert.equal(orientationAttempts,2); assert.equal(result.preguntas.length,2);
-assert.match(calls[1].systemInstruction.parts[0].text,/anterior era inválido/);
+assert.equal(result.fallback,false); assert.equal(orientationAttempts,1); assert.equal(result.preguntas.length,2);
+
 let answer='';
 for await (const part of generateAnswer('stub',text,[source],[],undefined,profile)) answer+=part;
 assert.match(answer,/comunidades negras/); assert.doesNotMatch(answer,/Como integrante de un pueblo indígena/);
 assert.match(answer,/\[1\]/); assert.match(answer,/¿Quieres que te oriente/);
-assert.ok(calls.some(c=>c.generationConfig.responseSchema?.required?.[0]==='claims'));
+assert.equal(calls.length, 2, 'Una generación por acción; verificación local');
+assert.ok(!calls.some(c=>c.generationConfig.responseSchema?.required?.[0]==='claims'));
+assert.doesNotMatch(answer, /garantía aplica en asuntos distintos/);
 assert.equal(profile.group,'Pueblo indígena');
 const {accesos}=await import('../support/db-stub.mjs');
 assert.equal(accesos,0);

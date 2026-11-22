@@ -1,4 +1,6 @@
-import { askGeminiJSON } from "@/lib/rag";
+import { assistTool, ASSISTANCE_ACTIONS, type AssistanceAction } from "@/lib/tool-assistance";
+import { explicitDanger } from "@/lib/emergency";
+import { askGeminiJSON, retrieve } from "@/lib/rag";
 import { checkChatLimit, CHAT_LIMIT_MESSAGE } from "@/lib/rate-limit";
 import { CONVERSATION_LIMITS, converse, fallbackConversation, parseConversationInput } from "@/lib/tool-conversation";
 export const dynamic = "force-dynamic";
@@ -18,14 +20,20 @@ async function readInput(req: Request) {
       if (bytes > CONVERSATION_LIMITS.body) { await reader.cancel(); return null; }
       text += decoder.decode(value, { stream: true });
     }
-    return parseConversationInput(JSON.parse(text + decoder.decode()));
+    const raw = JSON.parse(text + decoder.decode());
+    const input = parseConversationInput(raw);
+    if (!input || raw.accion !== undefined && !ASSISTANCE_ACTIONS.includes(raw.accion)) return null;
+    return { input, action: raw.accion as AssistanceAction | undefined };
   } catch { return null; }
   finally { reader.releaseLock(); }
 }
 export async function POST(req: Request) {
-  const input = await readInput(req);
-  if (!input) return Response.json({ error: "Envía una tutela con hasta 16 mensajes recientes de 2000 caracteres y 16000 caracteres en total." }, { status: 400, headers });
+  const parsed = await readInput(req);
+  if (!parsed) return Response.json({ error: "Envía una tutela con hasta 16 mensajes recientes de 2000 caracteres y 16000 caracteres en total." }, { status: 400, headers });
+  const { input, action } = parsed;
+  if (explicitDanger(input.mensajes.at(-1)?.content || "")) return Response.json(fallbackConversation(input), { headers });
   const limit = await checkChatLimit(req);
   if (!limit.allowed) return Response.json({ ...fallbackConversation(input), respuesta: CHAT_LIMIT_MESSAGE + " Puedes continuar paso a paso; tu texto se conserva." }, { status: 429, headers: { ...headers, "Retry-After": String(limit.retryAfter) } });
+  if (action) return Response.json(await assistTool(input, action, { ask: askGeminiJSON, retrieve: (text, signal) => retrieve(text, "", undefined, [], { signal, reformulate: async () => null }), signal: req.signal }), { headers });
   return Response.json(await converse(input, { ask: askGeminiJSON, signal: req.signal }), { headers });
 }

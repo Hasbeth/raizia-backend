@@ -28,7 +28,7 @@ test('La llamada de reformulación clasifica charla y ambiguo antes de cualquier
       return JSON.stringify(classification({ tipo, respuesta, falta, subtemas: [] }));
     });
     const result = await retrieve(message, '', undefined, [], { ...noSearch, reformulate });
-    assert.equal(calls, 1); assert.equal(result.reply, respuesta || falta); assert.deepEqual(result.sources, []);
+    assert.equal(calls, 1); assert.equal(result.reply, tipo === "charla" ? "¿Qué te gustaría contarme o resolver?" : falta); assert.deepEqual(result.sources, []);
     const { POST } = routeHarness({ rag: { isSmallTalk: () => false, retrieve: async () => result } })('chat');
     const events = await eventsOf(await send(POST, message));
     assert.equal(events[1].text, result.reply); assert.deepEqual(events[0].sources, []);

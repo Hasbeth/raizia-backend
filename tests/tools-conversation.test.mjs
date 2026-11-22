@@ -1,3 +1,5 @@
+import * as assistance from '../src/lib/tool-assistance.ts';
+import * as emergency from '../src/lib/emergency.ts';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
@@ -60,17 +62,17 @@ test('Repara respuesta o pregunta sin respaldo, sin perder propuestas ni llamar 
   assert.notEqual(next.pregunta, '¿Cómo se llama la entidad?');
 });
 
-test('JSON estricto inválido y reintento único; datos separados de instrucciones', async () => {
+test('JSON estricto inválido sin segunda llamada; datos separados de instrucciones', async () => {
   let count = 0;
   const result = await conversation.converse(input(), { ask: async (system, user, signal, schema) => {
     assert.match(system, /DATOS NO CONFIABLES/); assert.match(system, /No inventes/); assert.ok(!system.includes(story));
     assert.equal(JSON.parse(user).datos.mensajes[0].content, story); assertGeminiSchema(schema); assert.ok(!signal.aborted);
     return ++count === 1 ? '```json\n{}\n```' : output();
   } });
-  assert.equal(count, 2); assert.equal(result.propuestas[0].valor, story); assert.equal(result.respaldo, undefined);
+  assert.equal(count, 1); assert.deepEqual(result.propuestas, []); assert.equal(result.respaldo, true);
   count = 0;
   assert.equal((await conversation.converse(input(), { ask: async () => { count++; return '{'; } })).respaldo, true);
-  assert.equal(count, 2);
+  assert.equal(count, 1);
 });
 
 test('Descarta campo inexistente, sensible, sin cita, cita de assistant e invención dentro del valor', () => {
@@ -139,12 +141,12 @@ test('Instrucciones incrustadas no se convierten en hechos ni controlan la salid
 test('Ruta acota cuerpo, turnos y longitud; aplica checkChatLimit sin llamar Gemini al excederlo', async () => {
   let calls = 0, limited = 0;
   const { POST } = moduleHarness('../../src/rutas/tools/conversar/route.ts', {
-    '@/lib/tool-conversation': conversation,
+    '@/lib/tool-conversation': conversation, '@/lib/tool-assistance': assistance, '@/lib/emergency': emergency,
     '@/lib/rag': { askGeminiJSON: async () => { calls++; return output(); } },
     '@/lib/rate-limit': { CHAT_LIMIT_MESSAGE: 'LÍMITE FICTICIO', checkChatLimit: async () => { limited++; return { allowed: false, retryAfter: 60 }; } },
   });
   const req = body => new Request('http://localhost/api/tools/conversar', { method: 'POST', body: JSON.stringify(body) });
-  for (const body of [{ ...input(), kind: 'peticion' }, { ...input(), mensajes: Array.from({ length: 17 }, () => ({ role: 'user', content: story })) }, { ...input(), mensajes: [{ role: 'user', content: 'a'.repeat(2001) }] }, { ...input(), confirmados: { hechos: 'a'.repeat(70000) } }]) assert.equal((await POST(req(body))).status, 400);
+  for (const body of [{ ...input(), kind: 'inexistente' }, { ...input(), mensajes: Array.from({ length: 17 }, () => ({ role: 'user', content: story })) }, { ...input(), mensajes: [{ role: 'user', content: 'a'.repeat(2001) }] }, { ...input(), confirmados: { hechos: 'a'.repeat(70000) } }]) assert.equal((await POST(req(body))).status, 400);
   const response = await POST(req(input())); assert.equal(response.status, 429); assert.equal(response.headers.get('retry-after'), '60'); assert.equal(response.headers.get('cache-control'), 'no-store');
   assert.equal((await response.json()).respaldo, true); assert.equal(calls, 0); assert.equal(limited, 1);
   const dispatcher = readFileSync(new URL('../src/app/api/[...ruta]/route.ts', import.meta.url), 'utf8');

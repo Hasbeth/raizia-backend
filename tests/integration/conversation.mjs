@@ -1,3 +1,5 @@
+import * as assistance from '../../src/lib/tool-assistance.ts';
+import * as emergency from '../../src/lib/emergency.ts';
 import assert from 'node:assert/strict';
 import JSZip from 'jszip';
 import { db, query, closeDatabase } from '../../src/lib/db.ts';
@@ -12,7 +14,7 @@ const values = { hechos: words, accionado: 'ENTIDAD FICTICIA', actuaciones: 'GES
 const quoteFor = (campo, valor) => campo === 'medidaProvisional' ? 'No hay peligro si espero.' : valor;
 let aiCalls = 0;
 const { POST } = moduleHarness('../../src/rutas/tools/conversar/route.ts', {
-  '@/lib/rate-limit': rateLimit, '@/lib/tool-conversation': conversation,
+  '@/lib/rate-limit': rateLimit, '@/lib/tool-conversation': conversation, '@/lib/tool-assistance': assistance, '@/lib/emergency': emergency,
   '@/lib/rag': { askGeminiJSON: async () => { aiCalls++; return JSON.stringify({ respuesta: 'Gracias por agregar ese detalle.', pregunta: null, propuestas: Object.entries(values).map(([campo, valor]) => ({ campo, valor, cita_literal: quoteFor(campo, valor) })), faltan: [], peligro: false }); } },
 });
 try {

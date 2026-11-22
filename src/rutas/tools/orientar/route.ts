@@ -16,7 +16,7 @@ export async function POST(req: Request) {
   const profile = { group: clip(body?.profile?.group), community: clip(body?.profile?.community), territory: clip(body?.profile?.territory) };
   const history: QueryTurn[] = (Array.isArray(body?.history) ? body.history : []).filter((t: QueryTurn) => t?.role === "user" && typeof t.content === "string").slice(-4).map((t: QueryTurn) => ({ ...t, content: t.content.slice(0, 1500) }));
   const result = await orientWithLibrary({ text, current, profile, history }, {
-    retrieve: signal => retrieve(text, "", profile, history, { signal }), ask: askGeminiJSON, signal: req.signal,
+    retrieve: signal => retrieve(text, "", profile, history, { signal, reformulate: async () => null }), ask: (system, user, signal, schema) => askGeminiJSON(system, user, signal, schema, body?.background === true ? "background" : "foreground"), signal: req.signal,
   });
   return Response.json(result, { headers: { "Cache-Control": "no-store" } });
 }

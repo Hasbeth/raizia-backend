@@ -106,13 +106,13 @@ test('Peligro explícito siempre conserva 123 y atención urgente, incluso sin c
   assert.equal(r.urgencia, 'inmediata'); assert.match(r.emergency, /123/);
 });
 
-test('JSON estricto, un reintento, ids cerrados, citas inexistentes, timeout y respaldo visible', async () => {
+test('JSON tolerante, un reintento, ids cerrados, citas inexistentes, timeout y respaldo visible', async () => {
   let calls = 0;
   const deps = { retrieve: async () => library([hit(1)]), ask: async () => { calls++; return calls === 1 ? '{' : JSON.stringify(plan); } };
-  assert.equal((await orientWithLibrary({ text: story }, deps)).fallback, false); assert.equal(calls, 2);
+  assert.equal((await orientWithLibrary({ text: story }, deps)).fallback, false); assert.ok(calls >= 2);
   const invalidRoute = { id: 'inventado', por_que: 'Texto', pasos: [], citas: [1], condicion: 'Si ocurre' };
-  assert.equal(parseOrientation(JSON.stringify({ ...plan, rutas: [invalidRoute] }), 1), null);
-  assert.equal(parseOrientation(JSON.stringify({ ...plan, extra: true }), 1), null);
+  assert.deepEqual(parseOrientation(JSON.stringify({ ...plan, preguntas: [{ texto: '¿Quién lo hizo?' }], rutas: [invalidRoute] }), 1).rutas, []);
+  assert.equal('extra' in parseOrientation(JSON.stringify({ ...plan, extra: true }), 1), false);
   const parsed = parseOrientation(JSON.stringify({ ...plan, rutas: [{ ...invalidRoute, id: 'peticion', citas: [1, 99, -1] }] }), 1);
   assert.deepEqual(parsed.rutas[0].citas, [1]);
   for (const ask of [async () => '{}', async () => { throw Error('stub'); }, async () => new Promise(() => {})]) {

@@ -33,10 +33,10 @@ export function supportedOption(option: string, quote: string, riskContext: bool
   return false;
 }
 
-const acknowledgmentWords = new Set(words("gracias por contarme contarmelo compartir compartirme explicarme decirme entiendo comprendo escucho lamento siento podemos ayudarte ayudar organizar ordenar revisar juntos paso poco esto eso detalle detalles situacion dificil preocupacion preocupante tranquilamente calma bien acuerdo quieres corregir anterior sabes agregar dicho cuentas contado entiendo gracias"));
+const acknowledgmentWords = new Set(words("gracias por contarme contarmelo compartir compartirme explicarme decirme entiendo comprendo escucho lamento siento podemos ayudarte ayudar organizar ordenar revisar juntos paso poco esto eso detalle detalles situacion dificil preocupacion preocupante tranquilamente calma bien acuerdo quieres corregir anterior sabes agregar dicho cuentas contado entiendo gracias debe haber sido frustrante frustracion angustia angustiante pasar vivir vivido seguir seguimos tomemos tiempo ayudarte aclarar aclararlo comentas mencionas explicas dices sucedio sucedido recibiste recibida respuesta negativa negaron negado atencion solicitar solicitud preocupas preocupa preocupante importante dificultad dificil sentirte sientas siento lograr buscar busquemos"));
 export function validAcknowledgment(text: string, story: string): boolean {
   return !!text.trim() && text.length <= 500 && !/[¿?]/.test(text) && !hasProhibited(text) &&
-    text.split(/[.!…]+/).filter(s => s.trim()).length <= 2 && groundedText(text, story, 1, acknowledgmentWords);
+    text.split(/[.!…]+/).filter(s => s.trim()).length <= 2 && groundedText(text, story, 0.8, acknowledgmentWords) && !/\b(?:usted|ustedes|debe|debes|obligad|ilegal|procedente|ganar)\b/.test(normalizeEvidence(text));
 }
 export function validConversationQuestion(text: unknown): text is string {
   return typeof text === "string" && text.length <= 240 && text.trim().endsWith("?") &&
