@@ -11,6 +11,8 @@ const directory = dirname(fileURLToPath(import.meta.url));
 
 // Load the actual handlers with isolated auth/repository adapters. No database,
 // session, environment file, network request, or original document is changed.
+let loginGate = { allowed: true, retryAfter: 0 };
+let loginFailures = 0;
 function harness({ admin = true, configured = true, documents = {} } = {}) {
   const cookieWrites = [];
   const auth = {
@@ -30,6 +32,7 @@ function harness({ admin = true, configured = true, documents = {} } = {}) {
     const code = ts.transpileModule(readFileSync(path, "utf8"), { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 } }).outputText;
     const localRequire = (specifier) => {
       if (specifier === "@/lib/auth") return auth;
+      if (specifier === "@/lib/rate-limit") return { checkLoginLimit: async () => loginGate, recordLoginFailure: async () => { loginFailures++; }, clearLoginFailures: async () => {} };
       if (specifier === "@/lib/documents") return repository;
       if (specifier === "@/lib/constants") return load(resolve(directory, "../../lib/constants.ts"));
       if (specifier === "next/headers") return { cookies: async () => ({ set: (...args) => cookieWrites.push(args) }) };
@@ -58,6 +61,20 @@ test("all private methods reject unauthenticated requests before parsing or acce
       assert.match(response.headers.get("cache-control"), /no-store/);
     }
   }
+});
+
+test("login blocks after the limit without checking the password and records failures", async () => {
+  const h = harness();
+  loginFailures = 0;
+  assert.equal((await h.route("login").POST(request({ password: "incorrecta" }))).status, 401);
+  assert.equal(loginFailures, 1);
+  loginGate = { allowed: false, retryAfter: 120 };
+  try {
+    const blocked = await h.route("login").POST(request({ password: "clave-de-prueba" }));
+    assert.equal(blocked.status, 429);
+    assert.equal(blocked.headers.get("retry-after"), "120");
+    assert.equal(h.cookieWrites.length, 0);
+  } finally { loginGate = { allowed: true, retryAfter: 0 }; }
 });
 
 test("login requires configuration, delays invalid passwords, and sets the shared session cookie", async () => {

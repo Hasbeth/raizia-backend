@@ -1,43 +1,22 @@
-import { askOnce, ollamaStatus } from "@/lib/rag";
-import { answerDoubts, buildRoute, CLASSIFY_PROMPT, ROUTE_IDS, toolFits, triageByRules } from "@/lib/triage";
+﻿import { askGeminiJSON, retrieve } from "@/lib/rag";
+import { checkChatLimit, CHAT_LIMIT_MESSAGE } from "@/lib/rate-limit";
+import { explicitDanger, fallbackOrientation, orientWithLibrary } from "@/lib/orientation";
+import type { QueryTurn } from "@/lib/reformulation";
 export const dynamic = "force-dynamic";
-/**
- * Orienta a partir del relato completo: hasta tres caminos ordenados por peso,
- * las dudas que la persona expresó y si la herramienta actual (`current`) corresponde.
- */
 export async function POST(req: Request) {
-    const body = await req.json().catch(() => null);
-    const text = String(body?.text || "").trim().slice(0, 8000);
-    const current = String(body?.current || "");
-    if (text.length < 12)
-        return Response.json({ routes: [], doubts: [], fits: true });
-    let ids = triageByRules(text);
-    if (!ids.length) {
-        // Sin señales claras: la IA local elige dentro de un conjunto cerrado y pequeño.
-        try {
-            const status = await ollamaStatus();
-            if (status.available && status.model) {
-                const answer = await askOnce(status.model, CLASSIFY_PROMPT, text.slice(0, 2500), 12, req.signal);
-                const word = answer.toLowerCase().replace(/[^a-z-]/g, "");
-                const id = ROUTE_IDS.find((r) => word === r || word.startsWith(r));
-                // Solo se le cree al modelo pequeño en lo urgente; lo demás va a orientación con una entidad.
-                if (id && ["denuncia", "tutela"].includes(id))
-                    ids = [id];
-            }
-        }
-        catch (e) {
-            if (!req.signal.aborted)
-                console.error("[orientar]", e);
-        }
-    }
-    const doubts = answerDoubts(text);
-    // Sin clasificación confiable no se interrumpe a la persona dentro de una herramienta.
-    if (!ids.length) {
-        return Response.json({ routes: current ? [] : [buildRoute("acompanamiento", text)], doubts, fits: true });
-    }
-    return Response.json({
-        routes: ids.slice(0, 3).map((id) => buildRoute(id, text)),
-        doubts,
-        fits: current ? toolFits(current, ids.slice(0, 3)) : true,
-    });
+  const body = await req.json().catch(() => null);
+  const text = typeof body?.text === "string" ? body.text.trim() : "";
+  if ((!explicitDanger(text) && text.length < 12) || text.length > 8000) return Response.json({ error: "Escribe un relato de entre 12 y 8000 caracteres." }, { status: 400 });
+  const current = typeof body?.current === "string" ? body.current : "";
+  const limit = await checkChatLimit(req);
+  if (!limit.allowed) return Response.json({ ...fallbackOrientation(text), limitNotice: CHAT_LIMIT_MESSAGE }, {
+    headers: { "Retry-After": String(limit.retryAfter), "Cache-Control": "no-store" },
+  });
+  const clip = (v: unknown) => typeof v === "string" ? v.trim().slice(0, 80) : "";
+  const profile = { group: clip(body?.profile?.group), community: clip(body?.profile?.community), territory: clip(body?.profile?.territory) };
+  const history: QueryTurn[] = (Array.isArray(body?.history) ? body.history : []).filter((t: QueryTurn) => t?.role === "user" && typeof t.content === "string").slice(-4).map((t: QueryTurn) => ({ ...t, content: t.content.slice(0, 1500) }));
+  const result = await orientWithLibrary({ text, current, profile, history }, {
+    retrieve: signal => retrieve(text, "", profile, history, { signal }), ask: askGeminiJSON, signal: req.signal,
+  });
+  return Response.json(result, { headers: { "Cache-Control": "no-store" } });
 }

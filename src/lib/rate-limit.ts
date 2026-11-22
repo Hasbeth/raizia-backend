@@ -8,6 +8,46 @@ function limit(name: string, fallback: number): number {
   return Number.isSafeInteger(value) && value > 0 ? value : fallback;
 }
 
+const LOGIN_WINDOW_MS = 15 * 60_000;
+function loginKey(request: Request, scope: string) {
+  const salt = process.env.CRON_SECRET || process.env.SESSION_SECRET || "raizia-local-rate-limit";
+  const ip = request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || request.headers.get("x-real-ip")?.trim() || "unknown";
+  return `login:fail:${createHash("sha256").update(JSON.stringify([salt, scope, ip])).digest("hex")}`;
+}
+const loginStart = (now: Date) => new Date(Math.floor(now.getTime() / LOGIN_WINDOW_MS) * LOGIN_WINDOW_MS);
+const productionRuntime = () => !!process.env.VERCEL || process.env.NODE_ENV === "production";
+
+/** Máx. 5 fallos por IP cada 15 min y 30 intentos globales por minuto. En producción, si no se puede contar, no se deja entrar. */
+export async function checkLoginLimit(request: Request, scope = "admin", now = new Date()): Promise<{ allowed: boolean; retryAfter: number }> {
+  try {
+    const start = loginStart(now);
+    const retryAfter = Math.max(1, Math.ceil((start.getTime() + LOGIN_WINDOW_MS - now.getTime()) / 1000));
+    return await tx(async database => {
+      const [failed] = await database.query<{ count: number }>("SELECT count FROM rate_limits WHERE bucket=$1 AND window_start=$2::timestamptz", [loginKey(request, scope), start.toISOString()]);
+      if (Number(failed?.count || 0) >= limit("LOGIN_MAX_FAILURES", 5)) return { allowed: false, retryAfter };
+      const minute = new Date(Math.floor(now.getTime() / 60_000) * 60_000);
+      const [global] = await database.query<{ count: number }>(`INSERT INTO rate_limits(bucket,window_start,count) VALUES('login:global',$1::timestamptz,1)
+        ON CONFLICT(bucket,window_start) DO UPDATE SET count=rate_limits.count+1 RETURNING count`, [minute.toISOString()]);
+      if (Number(global.count) > limit("LOGIN_GLOBAL_PER_MINUTE", 30)) return { allowed: false, retryAfter: 60 };
+      return { allowed: true, retryAfter: 0 };
+    });
+  } catch {
+    console.error("[login-rate-limit] No se pudo comprobar el límite.");
+    return productionRuntime() ? { allowed: false, retryAfter: 60 } : { allowed: true, retryAfter: 0 };
+  }
+}
+export async function recordLoginFailure(request: Request, scope = "admin", now = new Date()) {
+  try {
+    await tx(database => database.query(`INSERT INTO rate_limits(bucket,window_start,count) VALUES($1,$2::timestamptz,1)
+      ON CONFLICT(bucket,window_start) DO UPDATE SET count=rate_limits.count+1`, [loginKey(request, scope), loginStart(now).toISOString()]));
+  } catch { console.error("[login-rate-limit] No se pudo registrar el intento."); }
+}
+export async function clearLoginFailures(request: Request, scope = "admin", now = new Date()) {
+  try {
+    await tx(database => database.query("DELETE FROM rate_limits WHERE bucket=$1 AND window_start=$2::timestamptz", [loginKey(request, scope), loginStart(now).toISOString()]));
+  } catch { /* el contador expira solo */ }
+}
+
 /** Solo /api/chat. Ventanas UTC; ningún identificador contiene la IP en claro. */
 export async function checkChatLimit(request: Request, now = new Date()): Promise<{ allowed: boolean; retryAfter: number }> {
   try {

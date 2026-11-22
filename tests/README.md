@@ -1,8 +1,10 @@
 # Pruebas de RAIZIA · Backend
 
-Límite de `/api/chat`: `CHAT_LIMIT_IP_PER_MINUTE` (12),
+Límite compartido de `/api/chat` y `/api/tools/orientar`: `CHAT_LIMIT_IP_PER_MINUTE` (12),
 `CHAT_LIMIT_IP_PER_DAY` (80) y `CHAT_LIMIT_GLOBAL_PER_DAY` (1500).
 Aceptan enteros positivos. Las ventanas usan UTC; los saludos no consumen cupo.
+El orientador devuelve orientación general con aviso visible y `Retry-After` si
+se agota el cupo; no ejecuta recuperación ni generación en ese caso.
 La sal usa el `CRON_SECRET` existente; solo `RAIZIA_MODO=local` permite la sal fija.
 Si no se puede contar, se permite continuar y se registra un mensaje sin datos
 personales. La tarea de mantenimiento elimina ventanas de más de dos días.
@@ -242,3 +244,46 @@ sin `DATABASE_URL` falla antes de abrir PGlite, incluso fuera de Vercel.
 ni ejecuta SQL; `chunk-search.test.mjs` comprueba el borrado idempotente del índice
 antiguo sin reescribir `chunks` ni reconstruir HNSW. El DROP normal puede tomar un
 bloqueo durante la migración explícita; no se ejecuta en un arranque frío productivo.
+
+## Orientación, identidad, contexto y citas (22-11-2026)
+
+`orientation-identity.test.mjs` cubre resolución determinista del grupo por turno,
+terceros, perfil complementario e inmutable, elección de ambos grupos y búsqueda
+sin sesgo del perfil contradictorio. Comprueba CEDAW/Belém excluidas, prioridad
+racial, comparación con fuentes de ambos grupos, reservas de contexto y una
+integración adicional sobre PGlite en memoria. «Línea Negra» no se interpreta
+como identidad NARP.
+
+El orientador activo usa `retrieve` y JSON de Gemini con esquema estricto, un
+reintento y plazo total de 12 segundos (incluye recuperación y verificación).
+Las únicas reglas de respuesta son alerta explícita de peligro y respaldo
+neutral. `triage.ts` aporta el catálogo cerrado de títulos y herramientas; sus
+textos/reglas antiguos no se ejecutan en la ruta. El resumen usa extractos del
+relato y respuestas, sin convertir preguntas previas en hechos. Las rutas se
+posponen mientras haya preguntas sobre los hechos. El relato se precarga por
+sessionStorage; el servidor no modifica perfiles.
+
+`source-policy.ts` separa norma, jurisprudencia y contexto por tipo documental,
+independientemente del peso. Los trámites, casos, cifras y experiencias reservan
+hasta dos fuentes de contexto de nueve, preservando la colección principal.
+Los nuevos tipos Boletín, Cartilla, Guía y Caso también se aceptan en el editor.
+Los filtros por población se aplican antes del cupo y después de hidratar. Una
+referencia normativa explícita activa su documento como tema, sin atribuir esa
+población a la persona. Las vías de violencia de pareja permanecen condicionadas.
+
+El chat retiene los tokens jurídicos hasta verificar las afirmaciones. La
+verificación usa JSON de Gemini con extractos literales comprobados en las
+fuentes, corrige referencias o retira afirmaciones. Tiene un plazo de 2,8 segundos;
+si falla conserva únicamente citas con coincidencia textual suficiente, números
+y población compatibles. El contexto no acredita obligaciones. Sus descripciones
+llevan atribución y fecha cuando existe, con sección propia. Esta comprobación
+reduce errores, pero no equivale a una auditoría jurídica humana ni garantiza
+la comprensión de Gemini en producción.
+
+`integration/orientation-gemini.mjs` ejecuta el transporte real de generación
+con fetch simulado: esquema del orientador, reintento, verificación posterior,
+respuesta NARP frente al perfil indígena y cero accesos a base. Las pruebas
+usan casos sintéticos y no contienen credenciales reales ni datos personales.
+La evaluación añade dos regresiones fuera del denominador: consulta racial
+sin perfil y con perfil indígena; exige fuente racial en top 3 y ninguna
+CEDAW/Belém en top 9. Los resultados de stubs no miden Gemini real.

@@ -7,6 +7,7 @@ import { embedQuery, embeddingModel, toPgvector } from "./embeddings";
 import { hydrateChunks } from "./storage";
 import { MARK_CLOSE, MARK_OPEN } from "./constants";
 import { createTimings, type Timings } from "./timings";
+import { populationAllowed, sourceKind, type PopulationContext, type SourceKind } from "./source-policy";
 
 const STOPWORDS = new Set(
   `a al algo algun alguna algunas alguno algunos ante antes aqui asi aun aunque bien cada casi como con contra cual cuales cuando cuanto de del desde donde dos el ella ellas ellos en entre era eran es esa esas ese eso esos esta estaba estan estar estas este esto estos fue fueron ha habia hace hacer hacemos hago han hasta hay la las le les lo los mas me mi mis mucho muy nada ni no nos nosotros nuestra nuestras nuestro nuestros o otra otras otro otros para pero poco por porque puede pueden puedo que quien quienes quiero se sea segun ser si sido sin sobre solo somos son soy su sus tal tambien tanto te tengo tenemos tiene tienen toda todas todo todos tu tus un una unas uno unos usted ustedes va van y ya yo debo debe deben decir dice dicen saber cuales favor hola gracias necesito quisiera explicame explica dime significa`.split(
@@ -182,6 +183,7 @@ export type Hit = {
   queryIndexes?: number[];
   articleKey?: string;
   articleContext?: boolean;
+  kind?: SourceKind;
 };
 
 type HitRow = {
@@ -388,7 +390,7 @@ export async function vectorCandidates(vector: Float32Array, model: string, appr
 export async function searchChunks(
   query: string,
   opts: { topicIds?: number[]; limit?: number; boostText?: string; publicOnly?: boolean; perDocument?: number; hydrate?: boolean; documentIds?: number[];
-    context?: SearchContext; vector?: Float32Array | null; timings?: Timings } = {},
+    context?: SearchContext; vector?: Float32Array | null; timings?: Timings; population?: PopulationContext; sourceKind?: SourceKind } = {},
 ): Promise<Hit[]> {
   const terms = queryTerms(query);
   if (!terms.length) return [];
@@ -409,7 +411,9 @@ export async function searchChunks(
   const semanticIds = new Set(semantic.map(r => r.chunk_id));
   const candidates = [...new Map([...lexical,...semantic,...cards].map(r => [r.chunk_id,r])).values()];
   const allowed = opts.documentIds ? new Set(opts.documentIds) : null;
-  const pool = candidates.filter(r => !allowed || allowed.has(r.document_id))
+  const pool = candidates.filter(r => (!allowed || allowed.has(r.document_id)) &&
+    (!opts.population || populationAllowed({ title: r.title, heading: r.heading }, opts.population)) &&
+    (!opts.sourceKind || sourceKind({ docType: r.doc_type }) === opts.sourceKind))
     .sort((a,b) => (fused.get(b.chunk_id) || 0)-(fused.get(a.chunk_id) || 0));
   // Cupos de candidatos y de resultados para la colección principal.
   const rows = [...new Map([...pool.slice(0,Math.max(120,limit*10)),

@@ -107,6 +107,6 @@ test('La unión elimina palabras solapadas sin confundir letras finales ni puntu
 
 test('Prompt: ausencia de evidencia no niega derechos y el reconocimiento explícito va primero', () => {
   for (const rule of ['Nunca afirmes que un derecho, exoneración o beneficio NO existe solo porque no aparece en las fuentes',
-    'en las fuentes que revisé no encontré ese punto','sugiere confirmarlo','según su perfil, ponlo primero',
-    'con su condición o requisito exacto y su cita']) assert.ok(SYSTEM_PROMPT.includes(rule),rule);
+    'en las fuentes que revisé no encontré ese punto','sugiere confirmarlo','grupo resuelto EN ESTE TURNO',
+    'ponlo primero con sus condiciones y cita']) assert.ok(SYSTEM_PROMPT.includes(rule),rule);
 });

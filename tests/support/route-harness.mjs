@@ -1,6 +1,7 @@
 import { readFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import { fileURLToPath } from "node:url";
+import * as identity from "../../src/lib/identity.ts";
 
 const require = createRequire(import.meta.url);
 const ts = require("typescript");
@@ -14,7 +15,7 @@ export function routeHarness({ documents = {}, auth = {}, rag = {}, tools = {}, 
       return target[key];
     },
   });
-  const adapters = { "@/lib/documents": strict(documents), "@/lib/auth": strict(auth), "@/lib/rag": strict(rag), "@/lib/tools-config": strict(tools), "@/lib/rate-limit": strict(rateLimit) };
+  const adapters = { "@/lib/identity": identity, "@/lib/documents": strict(documents), "@/lib/auth": strict(auth), "@/lib/rag": strict(rag), "@/lib/tools-config": strict(tools), "@/lib/rate-limit": strict(rateLimit) };
   return (name) => {
     const path = fileURLToPath(new URL(`${name}/route.ts`, root));
     const code = ts.transpileModule(readFileSync(path, "utf8"), {

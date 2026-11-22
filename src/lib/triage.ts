@@ -1,11 +1,8 @@
 /**
- * Orientador: lee TODO el relato, reconoce los asuntos que contiene, los ordena
- * por peso y responde las dudas que la persona expresa.
- *
- * - Un relato puede traer varios asuntos (una obra sin consulta, daño al agua,
- *   intimidación…): cada uno suma señales y se muestran hasta tres caminos.
- * - Las rutas y las respuestas son un conjunto cerrado, redactado a mano y
- *   verificado contra los textos oficiales de la biblioteca. La IA no las escribe.
+ * Catálogo cerrado de identificadores, títulos y herramientas.
+ * Las reglas y textos antiguos se conservan para compatibilidad y regresiones.
+ * El orientador activo NO consume issue/why/steps ni triageByRules: genera y
+ * verifica la orientación con la biblioteca en orientation.ts.
  */
 import { TOOLS } from "./tools-config";
 
@@ -28,7 +25,7 @@ const tool = (kind: string, label: string) => ({ slug: TOOLS[kind].slug, name: T
 type Step = string | { text: string; when: RegExp };
 type RouteDef = Omit<Route, "steps"> & { steps: Step[] };
 
-const DEFS: Record<string, RouteDef> = {
+export const DEFS: Record<string, RouteDef> = {
   desacato: {
     id: "desacato", title: "Pedir que cumplan la tutela", issue: "Ya hay una orden del juez y sigue sin cumplirse.",
     why: "El juzgado puede exigir el cumplimiento del fallo y valorar el desacato (artículos 27 y 52 del Decreto 2591 de 1991).",
@@ -83,7 +80,7 @@ const DEFS: Record<string, RouteDef> = {
   },
   denuncia: {
     id: "denuncia",
-    title: "Denunciar la agresión o el abuso",
+    title: "Consultar la vía de denuncia",
     issue: "Hubo una agresión u otro hecho que puede ser un delito.",
     why: "Lo que cuentas puede ser un delito o un abuso de autoridad. Eso no se resuelve con una petición: se denuncia.",
     steps: [

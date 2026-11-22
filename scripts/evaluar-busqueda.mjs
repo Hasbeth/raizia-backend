@@ -116,11 +116,21 @@ try {
     report.regresiones[q] = { esperado: expected, primero: hits[0]?.documentId, correcto: hits[0]?.documentId === expected };
   }
   report.segundos = (Date.now() - started) / 1000;
+  report.pertinencia = {};
+  for (const group of ['', 'Pueblo indígena']) {
+    queryCache.clear();
+    const { hits } = await retrieve('Un policía me está discriminando por ser negro', '', { group, community: '', territory: '' }, [], { reformulate: async () => null });
+    const { racialPriority } = await import('../src/lib/source-policy.ts');
+    const wrong = hits.some(h => /CEDAW|Belém|Ley 51 de 1981|Ley 248 de 1995/i.test(h.title));
+    const racialTop3 = hits.slice(0,3).some(h => racialPriority(h) >= 2);
+    report.pertinencia[group || 'sin perfil'] = { correcto: !wrong && racialTop3, racialTop3, documentos: hits.map(h => ({ id: h.documentId, titulo: h.title, apartado: h.heading })) };
+  }
   report.detalles.sort((a,b)=>a.id-b.id);
   const reportFile = path.join(output, hybrid ? 'resultados.json' : 'resultados-lexico.json');
   fs.writeFileSync(reportFile, JSON.stringify(report, null, 2) + '\n');
   console.log(JSON.stringify({ variantes: report.variantes, regresiones: report.regresiones, informe: reportFile }, null, 2));
   if (Object.values(report.regresiones).some(r => !r.correcto)) throw new Error('Falló una regresión de prioridad por ficha.');
+  if (Object.values(report.pertinencia).some(r => !r.correcto)) throw new Error('Falló pertinencia racial: exclusión CEDAW/Belém y fuente racial top 3.');
   if (hybrid && (report.variantes.reformulado_hibrido.originales30.aciertos < 29 ||
     report.variantes.reformulado_hibrido.beneficios10.aciertos < 10)) {
     throw new Error('Regresión de recuperación con stubs: se requieren al menos 29/30 y 10/10.');

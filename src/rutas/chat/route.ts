@@ -2,6 +2,7 @@ import type { ChatEvent } from "@/lib/constants";
 import { suggestTool } from "@/lib/tools-config";
 import { generateAnswer, isSmallTalk, ollamaStatus, retrieve, STATIC_GREETING } from "@/lib/rag";
 import { checkChatLimit, CHAT_LIMIT_MESSAGE } from "@/lib/rate-limit";
+import { resolveIdentity } from "@/lib/identity";
 export const runtime = "nodejs";
 export const maxDuration = 300;
 export const dynamic = "force-dynamic";
@@ -36,11 +37,12 @@ export async function POST(req: Request) {
         territory: clip(body?.profile?.territory),
     };
     const previousUser = [...history].reverse().find((m) => m.role === "user")?.content || "";
+    const identityQuestion = resolveIdentity(message, profile, history).question;
     const encoder = new TextEncoder();
     const stream = new ReadableStream<Uint8Array>({
         async start(controller) {
             let subtemas: string[] = [];
-            const send = (e: ChatEvent) => controller.enqueue(encoder.encode(JSON.stringify(e.type === "meta" ? { ...e, subtemas } : e) + "\n"));
+            const send = (e: ChatEvent) => controller.enqueue(encoder.encode(JSON.stringify(e.type === "meta" ? { ...e, subtemas, identityQuestion } : e) + "\n"));
             try {
                 // Saludos y charla breve no necesitan buscar; el resto siempre pasa por la biblioteca.
                 const retrieval = smallTalk

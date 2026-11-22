@@ -10,6 +10,10 @@ export const DOC_TYPES = [
   "Convenio o tratado",
   "Directiva o circular",
   "Guía o informe",
+  "Boletín",
+  "Cartilla",
+  "Guía",
+  "Caso",
   "Otro",
 ] as const;
 
@@ -70,6 +74,7 @@ export type DocumentSummary = {
 };
 
 export type ChatSource = {
+  kind?: "norma" | "jurisprudencia" | "contexto";
   n: number;
   documentId: number;
   chunkId: number;
@@ -95,6 +100,7 @@ export type ChatMeta = {
   subtemas?: string[];
   model?: string;
   notice?: string;
+  identityQuestion?: { texto: string; opciones: string[] };
   /** Herramienta que podría servir para dejar el caso por escrito. */
   tool?: { slug: string; name: string };
 };
