@@ -1,0 +1,99 @@
+import assert from 'node:assert/strict';
+import test from 'node:test';
+import { readFileSync } from 'node:fs';
+import JSZip from 'jszip';
+import { buildDocument, buildModel } from '../src/lib/docgen.ts';
+import { ordinal } from '../src/lib/document-model.ts';
+import { TOOL_LIST, TOOLS, validateTool } from '../src/lib/tools-config.ts';
+import { reviewQuality } from '../src/lib/tools-quality.ts';
+import { triageByRules, toolFits } from '../src/lib/triage.ts';
+import { moduleHarness } from './support/module-harness.mjs';
+import { caseData, syntheticOnly } from './fixtures/tools-synthetic.mjs';
+
+for (const tool of TOOL_LIST) test(`Documento ${tool.kind}: estructura, firma, resaltado y páginas Word`, async () => {
+  const model = buildModel(tool.kind, caseData);
+  assert.match(model.date, /MUNICIPIO FICTICIO/);
+  assert.ok(model.reference.some(s => s.startsWith('REFERENCIA:')));
+  assert.ok(model.reference.some(s => s.startsWith('ASUNTO:')));
+  assert.ok(model.sections.some(s => /HECHOS/.test(s.title)));
+  assert.ok(model.sections.every(s => /^[IVX]+\. /.test(s.title)));
+  assert.match(model.sections.find(s => s.id === 'hechos').paragraphs[0], /^Primero\./);
+  assert.ok(model.signature.includes(caseData.nombre));
+  assert.match(model.email, /confirmación de recibo y número de radicación/);
+  assert.match(model.email, /completarlo a tiempo/);
+  const incomplete = buildModel(tool.kind, {});
+  assert.ok(incomplete.missing.length > 0);
+  assert.ok(incomplete.missing.every(s => /^\[completar: .+\]$/.test(s)));
+  assert.doesNotMatch(incomplete.intro, /, mayor de edad,/i);
+  const zip = await JSZip.loadAsync(await buildDocument(tool.kind, {}));
+  const xml = await zip.file('word/document.xml').async('string');
+  assert.match(xml, /Times New Roman/); assert.match(xml, /w:left="1701"/);
+  assert.match(xml, /w:highlight w:val="yellow"/);
+  const footer = await zip.file(Object.keys(zip.files).find(k => /^word\/footer\d+\.xml$/.test(k))).async('string');
+  assert.match(footer, /PAGE/); assert.match(footer, /NUMPAGES/);
+});
+test('Petición: orden de la guía, numerales en palabras y solicitudes adicionales elegidas', () => {
+  const model = buildModel('peticion', { ...caseData, consideraciones: 'CONSIDERACIÓN FICTICIA', peticionesAdicionales: ['Que se notifique por el medio indicado.'] });
+  assert.deepEqual(model.sections.map(s => s.title), ['I. HECHOS', 'II. PETICIÓN', 'III. FUNDAMENTOS DE DERECHO', 'IV. CONSIDERACIONES', 'V. ANEXOS', 'VI. NOTIFICACIONES']);
+  assert.match(model.sections[1].paragraphs[0], /^Primera\./);
+  assert.match(model.sections[1].paragraphs[1], /^Segunda\./);
+  assert.equal(ordinal(20, true), 'Vigésima primera');
+  assert.equal(buildModel('peticion', caseData).missing.length, 0);
+});
+test('Tutela: cinco fundamentos de procedencia construidos con respuestas y medida opcional', () => {
+  const model = buildModel('tutela', caseData);
+  const text = model.sections.find(s => s.id === 'procedencia').paragraphs.join('\n');
+  for (const title of ['Legitimación por activa', 'Legitimación por pasiva', 'Inmediatez', 'Subsidiariedad', 'Perjuicio irremediable', 'Especial protección']) assert.ok(text.includes(title));
+  for (const key of ['actuaciones', 'cuando', 'motivoAhora', 'otrosMedios', 'peligro', 'proteccionEspecial']) assert.ok(text.includes(caseData[key]));
+  assert.equal(model.sections.some(s => s.id === 'medida'), false);
+  const urgent = buildModel('tutela', { ...caseData, medidaProvisional: 'Sí', medida: 'MEDIDA FICTICIA', razonMedida: 'RAZÓN FICTICIA' });
+  assert.match(urgent.sections.find(s => s.id === 'medida').paragraphs[0], /artículo 7.*MEDIDA FICTICIA.*RAZÓN FICTICIA/);
+  assert.equal(urgent.sections.find(s => s.id === 'notificaciones').title, 'X. NOTIFICACIONES');
+  assert.match(model.sections.find(s => s.id === 'pretensiones').paragraphs[0], /Responsable:.*Plazo solicitado:.*Verificación del cumplimiento:/s);
+  assert.match(model.sections.find(s => s.id === 'pruebas').paragraphs[1], /Demuestra: Que negaron la copia/);
+  assert.ok(buildModel('tutela', { ...caseData, juramento: '' }).missing.some(s => s.includes('juramento')));
+});
+test('Desacato e impugnación: hechos, pedidos, fundamentos y distinción de caminos', () => {
+  const contempt = buildModel('desacato', { ...caseData, tercero: 'TERCERO FICTICIO' });
+  assert.deepEqual(contempt.sections.map(s => s.id), ['hechos', 'peticiones', 'fundamentos', 'consideraciones', 'pruebas', 'anexos', 'notificaciones']);
+  assert.match(contempt.sections.find(s => s.id === 'fundamentos').paragraphs[0], /27 y 52/);
+  assert.match(contempt.sections[1].paragraphs.join(' '), /representante legal.*integral.*responsabilidad.*competencia/);
+  assert.match(buildModel('impugnacion', caseData).sections.find(s => s.id === 'fundamentos').paragraphs[0], /31.*tres días siguientes a su notificación/);
+  const route = triageByRules('Ganamos la tutela pero la entidad no cumple el fallo.');
+  assert.equal(route[0], 'desacato'); assert.equal(toolFits('tutela', route), false); assert.equal(toolFits('desacato', route), true);
+  assert.equal(triageByRules('No estoy de acuerdo con el fallo de tutela.')[0], 'impugnacion');
+});
+test('Revisión: rojo solo datos inválidos; debilidades amarillas por cada pretensión', () => {
+  assert.equal(reviewQuality('peticion', {}).level, 'red');
+  assert.equal(reviewQuality('peticion', caseData).level, 'green');
+  const weak = reviewQuality('tutela', { ...caseData, hechos: 'La entidad negó la solicitud.', pretensiones: 'Que me ayuden', actuaciones: 'No', pruebasApoyo: '9', hechosApoyo: '', plazos: '' });
+  assert.equal(weak.level, 'amber');
+  for (const field of ['hechos', 'pretensiones', 'actuaciones', 'pruebasApoyo', 'hechosApoyo', 'plazos']) assert.ok(weak.issues.some(i => i.field === field), field);
+  const multiple = reviewQuality('tutela', { ...caseData, pretensiones: `${caseData.pretensiones}\nQue se entregue otro documento ficticio.` });
+  assert.ok(multiple.issues.some(i => i.message.includes('Pedido 2') && i.field === 'pruebasApoyo'));
+});
+test('Sección editada y faltantes son idénticos en modelo y Word; campos ajenos se descartan', async () => {
+  const data = { ...caseData, edicion_hechos: 'Primero. TEXTO FICTICIO EDITADO [completar: fecha exacta]' };
+  assert.ok(buildModel('peticion', data).missing.includes('[completar: fecha exacta]'));
+  const zip = await JSZip.loadAsync(await buildDocument('peticion', data));
+  assert.match(await zip.file('word/document.xml').async('string'), /TEXTO FICTICIO EDITADO/);
+  let captured;
+  const api = moduleHarness('../../src/rutas/tools/[kind]/route.ts', { '@/lib/docgen': { buildModel, buildDocument: async (kind, data) => { captured = data; return Buffer.from('DOCX-STUB'); } }, '@/lib/tools-config': { TOOLS, validateTool } });
+  const res = await api.POST(new Request('http://localhost/api/tools/peticion', { method: 'POST', body: JSON.stringify({ ...data, edicion_falso: 'NO ADMITIDO' }) }), { params: Promise.resolve({ kind: 'peticion' }) });
+  assert.equal(res.status, 200); assert.equal(res.headers.get('Cache-Control'), 'no-store');
+  assert.equal(captured.edicion_hechos, data.edicion_hechos); assert.equal(captured.edicion_falso, undefined);
+  const refused = await api.POST(new Request('http://localhost', { method: 'POST', body: JSON.stringify({ ...data, revisado: '' }) }), { params: Promise.resolve({ kind: 'peticion' }) });
+  assert.equal(refused.status, 400);
+});
+test('Catálogo, esquema y semáforo no divergen entre repositorios', () => {
+  for (const file of ['tools-config.ts', 'document-model.ts', 'tools-quality.ts']) assert.equal(readFileSync(new URL(`../src/lib/${file}`, import.meta.url), 'utf8'), readFileSync(new URL(`../../raizia-frontend/src/lib/${file}`, import.meta.url), 'utf8'));
+});
+test('Fixture nuevo exclusivamente sintético y referencias legales trazables', () => {
+  assert.equal(syntheticOnly, true);
+  for (const key of ['nombre', 'numeroDocumento', 'entidad', 'ciudad', 'radicado', 'juzgado']) assert.match(caseData[key], /FICTICI[OA]/);
+  for (const key of ['correo', 'contactoAccionado']) assert.match(caseData[key], /@example\.invalid$/);
+  assert.doesNotMatch(JSON.stringify(caseData), /\b\d{7,}\b/);
+  const manifest = JSON.parse(readFileSync(new URL('./tools-legal-verification.json', import.meta.url), 'utf8'));
+  assert.equal(manifest.readOnly, true); assert.equal(manifest.citations.length, 21);
+  for (const n of [7, 27, 31, 37, 52]) assert.ok(manifest.citations.some(c => c.citation === `Decreto 2591/1991, artículo ${n}`));
+});

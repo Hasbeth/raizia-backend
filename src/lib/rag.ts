@@ -1,3 +1,4 @@
+import { ORGANIZE_PROMPTS, PROBE_PROMPTS } from "./narrative-prompts";
 /**
  * Asistente con recuperación (RAG) sobre documentos aprobados.
  * El modelo de lenguaje puede ser Gemini (API de Google) u Ollama local:
@@ -528,29 +529,6 @@ export async function* generateAnswer(
   if (carry) yield carry;
 }
 
-const ORGANIZE_PROMPTS = {
-  hechos: `Ordenas relatos para documentos jurídicos en Colombia. La persona puede escribir con errores o mezclar ideas porque el español no es su primera lengua.
-
-Tarea: reescribe SU relato como una lista de hechos, uno por línea, en español claro y respetuoso, en primera persona y en orden de tiempo cuando sea posible.
-
-Reglas obligatorias:
-1. No agregues ningún hecho, fecha, nombre, lugar, cifra, norma ni conclusión que la persona no haya dicho.
-2. No quites información que la persona dio.
-3. Si algo no se entiende, déjalo con sus mismas palabras.
-4. No des consejos, opiniones ni explicaciones.
-5. Devuelve solo la lista: una línea por hecho, sin numeración, sin título y sin texto adicional.`,
-  peticiones: `Ordenas solicitudes para documentos jurídicos en Colombia. La persona puede escribir con errores porque el español no es su primera lengua.
-
-Tarea: reescribe lo que la persona pide como una lista de solicitudes concretas, una por línea, en español claro y respetuoso. Cada línea empieza con "Que".
-
-Reglas obligatorias:
-1. No agregues solicitudes, fechas, nombres, cifras ni normas que la persona no haya dicho.
-2. No quites nada de lo que pidió.
-3. Si algo no se entiende, déjalo con sus mismas palabras.
-4. No des consejos ni explicaciones.
-5. Devuelve solo la lista: una línea por solicitud, sin numeración, sin título y sin texto adicional.`,
-};
-
 /** Reescribe el relato en líneas claras. Devuelve "" si el resultado no es confiable. */
 export async function organizeNarrative(
   model: string,
@@ -564,7 +542,7 @@ export async function organizeNarrative(
       { role: "system", content: ORGANIZE_PROMPTS[kind] },
       { role: "user", content: text },
     ],
-    { temperature: 0.1, maxTokens: 700 },
+    { temperature: 0.1, maxTokens: 2600 },
     signal,
   );
   if (reply === null) return "";
@@ -574,24 +552,11 @@ export async function organizeNarrative(
     .filter(Boolean);
   const out = lines.join("\n");
   // Si el modelo se extendió mucho más que el relato original, pudo haber añadido contenido: se descarta.
-  if (!out || out.length > text.length * 2 + 200) return "";
+  if (!out || out.length > text.length * 2 + 200 || out.length < text.length * 0.65) return "";
+  const numbers = new Set(text.match(/\d+/g) || []);
+  if ((out.match(/\d+/g) || []).some(n => !numbers.has(n))) return "";
   return out;
 }
-
-const PROBE_PROMPTS = {
-  hechos: `Lees el relato de una persona que prepara un escrito para una entidad o un juez en Colombia. El español puede no ser su primera lengua.
-
-Decide si falta información importante para entender el caso: cuándo ocurrió, dónde ocurrió, quién lo hizo o qué respuesta recibió.
-- Si falta, escribe como máximo 2 preguntas cortas y muy sencillas, una por línea, para pedir SOLO lo que falta.
-- No preguntes lo que ya dijo. No des consejos ni explicaciones.
-- Si no falta nada importante, responde exactamente: COMPLETO`,
-  peticiones: `Lees lo que una persona quiere pedir en un escrito para una entidad o un juez en Colombia. El español puede no ser su primera lengua.
-
-Decide si queda claro qué quiere exactamente que hagan, entreguen o respondan.
-- Si no queda claro, escribe como máximo 2 preguntas cortas y muy sencillas, una por línea, para aclararlo.
-- No preguntes lo que ya dijo. No des consejos ni sugieras qué pedir.
-- Si está claro, responde exactamente: COMPLETO`,
-};
 
 /** Preguntas de seguimiento (0 a 2) para completar el relato antes de redactarlo. */
 export async function probeNarrative(

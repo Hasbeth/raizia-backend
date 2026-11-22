@@ -6,7 +6,8 @@ export const dynamic = "force-dynamic";
  */
 export async function POST(req: Request) {
     const body = await req.json().catch(() => null);
-    const text = String(body?.text || "").trim().slice(0, 6000);
+    const text = String(body?.text || "").trim();
+    if (text.length > 8000) return Response.json({ error: "El relato supera el tamaño permitido. Divídelo sin quitar hechos.", text, organized: false, questions: [] }, { status: 400 });
     const kind = body?.kind === "peticiones" ? "peticiones" : "hechos";
     if (!text)
         return Response.json({ text: "", organized: false, questions: [] });

@@ -1,0 +1,153 @@
+{
+  "source": "data/staging/biblioteca.db",
+  "readOnly": true,
+  "citations": [
+    {
+      "citation": "Constitución, artículo 23",
+      "documentId": 23,
+      "chunkId": 35,
+      "title": "Constitución Política de Colombia de 1991",
+      "sha256": "9fafbc65bbe9502b4e5e836c5623c164496180ca9c01170599ce57dc522f2818"
+    },
+    {
+      "citation": "Constitución, artículo 86",
+      "documentId": 23,
+      "chunkId": 173,
+      "title": "Constitución Política de Colombia de 1991",
+      "sha256": "fba69c89b70deb2e3954211120c2af57b5c17cb32f476bb4b59dd2fc32464b76"
+    },
+    {
+      "citation": "Constitución, artículo 87",
+      "documentId": 23,
+      "chunkId": 175,
+      "title": "Constitución Política de Colombia de 1991",
+      "sha256": "89897530e7f913f58f63a498030ff0d484a2216600a69bc66b78963b22eaff17"
+    },
+    {
+      "citation": "Constitución, artículo 88",
+      "documentId": 23,
+      "chunkId": 176,
+      "title": "Constitución Política de Colombia de 1991",
+      "sha256": "a100da8796edfda59cbcf90a5b028c190a48d4ceeec5249ec0441abc9fb0861c"
+    },
+    {
+      "citation": "Ley 1755/2015, artículo 14",
+      "documentId": 25,
+      "chunkId": 1058,
+      "title": "Ley 1755 de 2015 — Derecho fundamental de petición",
+      "sha256": "99af80757cc25efa08f273d53cb61ec0a3b229101f9998fac1e08cf2c1ab1d7a"
+    },
+    {
+      "citation": "Convenio 169, artículo 6 (Ley 21/1991)",
+      "documentId": 24,
+      "chunkId": 1013,
+      "title": "Ley 21 de 1991 — Aprueba el Convenio 169 de la OIT sobre pueblos indígenas y tribales",
+      "sha256": "01e70375596706e542b629beb2f6392fc9c00d001c2b5afab5e3fd8f8b568d8a"
+    },
+    {
+      "citation": "Decreto 2591/1991, artículo 7",
+      "documentId": 26,
+      "chunkId": 1096,
+      "title": "Decreto 2591 de 1991 — Reglamenta la acción de tutela",
+      "sha256": "feaed2a8c453d52a330bbba95a01a1611dbecb3c3f11f7fdc7231cbc14a14f48"
+    },
+    {
+      "citation": "Decreto 2591/1991, artículo 10",
+      "documentId": 26,
+      "chunkId": 1099,
+      "title": "Decreto 2591 de 1991 — Reglamenta la acción de tutela",
+      "sha256": "d37ecf79e241039606986d0ac44dd92a569e57a62c308cf00a780b8ec7b2d401"
+    },
+    {
+      "citation": "Decreto 2591/1991, artículo 27",
+      "documentId": 26,
+      "chunkId": 1115,
+      "title": "Decreto 2591 de 1991 — Reglamenta la acción de tutela",
+      "sha256": "95864a86fe5569d9277f2caeb51074dc01838fc26fe735b4aa91fe152683af69"
+    },
+    {
+      "citation": "Decreto 2591/1991, artículo 29",
+      "documentId": 26,
+      "chunkId": 1117,
+      "title": "Decreto 2591 de 1991 — Reglamenta la acción de tutela",
+      "sha256": "0c85680730f8fbe58c40299b0580783b6797f0eea1d6d6cdb48bd32c58acae19"
+    },
+    {
+      "citation": "Decreto 2591/1991, artículo 31",
+      "documentId": 26,
+      "chunkId": 1119,
+      "title": "Decreto 2591 de 1991 — Reglamenta la acción de tutela",
+      "sha256": "e2ecd90600586b0aef7457260df01f9cde34d873555804cdbca9ead4e53a1ecd"
+    },
+    {
+      "citation": "Decreto 2591/1991, artículo 37",
+      "documentId": 26,
+      "chunkId": 1126,
+      "title": "Decreto 2591 de 1991 — Reglamenta la acción de tutela",
+      "sha256": "4ad974efd367de856847cbb35e08cc85ca2cae0a8337b24ebd4eee9b46afe24a"
+    },
+    {
+      "citation": "Decreto 2591/1991, artículo 52",
+      "documentId": 26,
+      "chunkId": 1141,
+      "title": "Decreto 2591 de 1991 — Reglamenta la acción de tutela",
+      "sha256": "c0032e3731f4e8c91de8298ac6c15e6986d04baf4009fa60f5d25ce2545fbe3e"
+    },
+    {
+      "citation": "Ley 393/1997, artículo 8",
+      "documentId": 46,
+      "chunkId": 3715,
+      "title": "Ley 393 de 1997 — Acción de cumplimiento",
+      "sha256": "636176db99dc9fb27542e08d435da7905205612a6acd8df13666ce64e14164bf"
+    },
+    {
+      "citation": "Ley 393/1997, artículo 10",
+      "documentId": 46,
+      "chunkId": 3717,
+      "title": "Ley 393 de 1997 — Acción de cumplimiento",
+      "sha256": "374e07132ce1c6dace60b82ed6dbd161315e4d79831b6a6a2c4bae9acd04b81f"
+    },
+    {
+      "citation": "Ley 472/1998, artículo 4",
+      "documentId": 27,
+      "chunkId": 1153,
+      "title": "Ley 472 de 1998 — Acciones populares y de grupo",
+      "sha256": "9aa8bf992a4c60efa98efe6f6b9502f4bde58c8ea058249c73c90a35eb215439"
+    },
+    {
+      "citation": "Ley 472/1998, artículo 46",
+      "documentId": 27,
+      "chunkId": 1221,
+      "title": "Ley 472 de 1998 — Acciones populares y de grupo",
+      "sha256": "75950aa82f5d0787cc26250247399148ec8a77b29884218c8b80691fa2bb3cd3"
+    },
+    {
+      "citation": "Ley 472/1998, artículo 47",
+      "documentId": 27,
+      "chunkId": 1222,
+      "title": "Ley 472 de 1998 — Acciones populares y de grupo",
+      "sha256": "5538efd904b40b055f16f7b186b705b77652bf18af306eb45a21f444502383f2"
+    },
+    {
+      "citation": "Ley 472/1998, artículo 48",
+      "documentId": 27,
+      "chunkId": 1224,
+      "title": "Ley 472 de 1998 — Acciones populares y de grupo",
+      "sha256": "f9e5a3af81d688ebc11e411ada00332b327bdb60736e86be9e0d03b7259a0c20"
+    },
+    {
+      "citation": "Ley 472/1998, artículo 49",
+      "documentId": 27,
+      "chunkId": 1225,
+      "title": "Ley 472 de 1998 — Acciones populares y de grupo",
+      "sha256": "7bf6a7554b91c29bb12dbb86c34757d9f04a86cbaec102e0e7935c6dd90e3321"
+    },
+    {
+      "citation": "Ley 1437/2011, artículo 144",
+      "documentId": 50,
+      "chunkId": 4255,
+      "title": "Ley 1437 de 2011 — Código de Procedimiento Administrativo y de lo Contencioso Administrativo",
+      "sha256": "dfd8d2fcf8724730b41c49e7c321ab6b52c0c4dbd9b1466b87a460423d8a513c"
+    }
+  ]
+}

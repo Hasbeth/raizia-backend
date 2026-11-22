@@ -29,6 +29,18 @@ type Step = string | { text: string; when: RegExp };
 type RouteDef = Omit<Route, "steps"> & { steps: Step[] };
 
 const DEFS: Record<string, RouteDef> = {
+  desacato: {
+    id: "desacato", title: "Pedir que cumplan la tutela", issue: "Ya hay una orden del juez y sigue sin cumplirse.",
+    why: "El juzgado puede exigir el cumplimiento del fallo y valorar el desacato (artículos 27 y 52 del Decreto 2591 de 1991).",
+    steps: ["Busca el fallo y el número del caso.", "Señala qué orden sigue sin cumplirse y adjunta pruebas.", "Presenta el escrito al juzgado que conoció la tutela en primera instancia. No sirve para cambiar la orden."],
+    tool: tool("desacato", "Preparar incidente de desacato"),
+  },
+  impugnacion: {
+    id: "impugnacion", title: "Pedir que revisen el fallo de tutela", issue: "No estás de acuerdo con la decisión de tutela.",
+    why: "El artículo 31 del Decreto 2591 de 1991 permite impugnar dentro de 3 días siguientes a la notificación.",
+    steps: ["Revisa cuándo te notificaron: el plazo es corto.", "Explica qué decidió el juez, con qué no estás de acuerdo y por qué.", "Presenta la impugnación al juzgado que dictó el fallo. La orden debe cumplirse mientras se revisa."],
+    tool: tool("impugnacion", "Preparar impugnación"),
+  },
   "consulta-previa": {
     id: "consulta-previa",
     title: "Pedir información y exigir la consulta previa",
@@ -173,6 +185,8 @@ const count =(t: string, cues: RegExp[]) => cues.filter((re) => re.test(t)).leng
 
 /** Cada asunto suma una señal por cada pista distinta que aparece en el relato. */
 const SCORERS: Record<string, (t: string) => number> = {
+  desacato: t => /desacato|(?:tutela|fallo).{0,100}(?:no cumplen|incumpl|no se cumple)|(?:no cumplen|incumplen).{0,60}(?:fallo|tutela)|ganamos.{0,40}tutela.{0,60}no/.test(t) ? 8 : 0,
+  impugnacion: t => /impugna|(?:fallo|tutela).{0,100}(?:no estoy de acuerdo|no estamos de acuerdo)|no (?:estoy|estamos) de acuerdo.{0,60}(?:fallo|tutela)|(?:negaron|nego).{0,30}(?:la )?tutela/.test(t) ? 8 : 0,
   "consulta-previa": (t) => {
     const project = count(t, [
       /maquin|retroexcav|buldoz|volqueta/,
@@ -229,12 +243,13 @@ const SCORERS: Record<string, (t: string) => number> = {
 };
 
 /** Ante empates, lo más urgente primero. */
-const PRIORITY = ["denuncia", "tutela", "consulta-previa", "popular", "proteccion", "grupo", "cumplimiento", "justicia-propia", "peticion"];
+const PRIORITY = ["denuncia", "desacato", "impugnacion", "tutela", "consulta-previa", "popular", "proteccion", "grupo", "cumplimiento", "justicia-propia", "peticion"];
 
 /** Asuntos presentes en el relato, del más fuerte al más débil. */
 export function triageByRules(story: string): string[] {
   const t = fold(story);
   return PRIORITY.map((id) => ({ id, score: SCORERS[id](t) }))
+    .filter(x => !(SCORERS.desacato(t) || SCORERS.impugnacion(t)) || !["tutela", "cumplimiento"].includes(x.id))
     .filter((x) => x.score > 0)
     .sort((a, b) => b.score - a.score || PRIORITY.indexOf(a.id) - PRIORITY.indexOf(b.id))
     .map((x) => x.id);
@@ -291,6 +306,8 @@ acompanamiento: no es claro o no encaja en lo anterior.`;
 export function toolFits(currentKind: string, routeIds: string[]): boolean {
   if (!routeIds.length || currentKind === "acompanamiento") return true;
   const covers: Record<string, string[]> = {
+    desacato: ["desacato"],
+    impugnacion: ["impugnacion"],
     peticion: ["peticion"],
     tutela: ["tutela"],
     "consulta-previa": ["consulta-previa"],
