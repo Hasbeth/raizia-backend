@@ -19,19 +19,37 @@ test('Word de doce preguntas: secciones profesionales, derivaciones fieles y fal
   for (const answer of [short.hechos, short.actuaciones, short.cuando, short.accionado]) assert.ok(procedure.includes(answer));
   const requests = model.sections.find(s => s.id === 'pretensiones').paragraphs.join('\n');
   assert.match(requests, /Responsable: ENTIDAD FICTICIA/);
-  assert.match(requests, /Pruebas de apoyo: ninguna por ahora/);
+  assert.doesNotMatch(requests, /Hechos de apoyo|Pruebas de apoyo/);
   assert.equal(reviewQuality('tutela', short).issues.some(i => ['demuestra', 'pruebasApoyo'].includes(i.field)), false);
-  assert.match(requests, /\[completar: plazo del pedido 1\]/);
+  assert.doesNotMatch(requests, /\[completar:|Plazo solicitado|Verificación del cumplimiento/);
   assert.doesNotMatch(JSON.stringify(model), /48 horas|cuarenta y ocho|mayor de edad/);
   assert.deepEqual(model.sections.find(s => s.id === 'pruebas').paragraphs, ['ninguna por ahora']);
-  assert.ok(model.missing.some(s => s.includes('lugar de los hechos')));
+  assert.equal(model.missing.length, 1);
+  assert.match(model.missing[0], /dirección o correo judicial de la parte accionada/);
+  assert.equal(model.addressee[1], short.ciudad);
+  assert.match(model.sections.find(s => s.id === 'competencia').paragraphs[0], /Presento esta tutela desde MUNICIPIO FICTICIO/);
+  assert.doesNotMatch(model.sections.find(s => s.id === 'competencia').paragraphs[0], /ocurrió/);
   const zip = await JSZip.loadAsync(await buildDocument('tutela', short));
   const xml = await zip.file('word/document.xml').async('string');
   for (const marker of model.missing) assert.ok(xml.includes(marker), marker);
   assert.match(xml, /w:highlight w:val="yellow"/);
   assert.match(xml, /PROCEDENCIA/); assert.match(xml, /JURAMENTO/);
+  assert.equal((xml.match(/\[completar:/g) || []).length, 1);
   assert.doesNotMatch(xml, /48 horas/);
   assert.match(buildModel('tutela', { ...short, plazos: '48 horas' }).sections.find(s => s.id === 'pretensiones').paragraphs[0], /48 horas/);
+});
+
+test('Lugar explícito prevalece; prueba sin explicación y juramento pendiente no son faltantes', () => {
+  const model = buildModel('tutela', { ...short, lugarHechos: 'OTRO MUNICIPIO FICTICIO', pruebas: 'Carta ficticia de negativa', juramento: '' });
+  assert.equal(model.addressee[1], 'OTRO MUNICIPIO FICTICIO');
+  assert.match(model.sections.find(s => s.id === 'competencia').paragraphs[0], /ocurrió en OTRO MUNICIPIO FICTICIO/);
+  assert.doesNotMatch(model.sections.find(s => s.id === 'pruebas').paragraphs[0], /completar|Demuestra/);
+  assert.match(model.sections.find(s => s.id === 'juramento').paragraphs[0], /Confirmación pendiente/);
+  assert.equal(model.missing.length, 1);
+  assert.ok(reviewQuality('tutela', { ...short, juramento: '' }).issues.some(i => /Confirmación pendiente/.test(i.message)));
+  assert.ok(!reviewQuality('tutela', short).issues.some(i => /juramento/.test(i.message)));
+  assert.deepEqual(buildModel('tutela', { ...short, contactoAccionado: 'entidad@example.invalid' }).missing, []);
+  assert.ok(TUTELA.steps.every(s => s.fields.every(f => !['hechosApoyo', 'pruebasApoyo'].includes(f.name))));
 });
 
 test('Condicionales y datos anteriores conservan medida, representación, pruebas y plazos expresos', () => {

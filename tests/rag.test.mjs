@@ -4,7 +4,7 @@ import { createReformulator, parseReformulation, createGeminiBudget } from '../s
 import { buildMessages, SYSTEM_PROMPT, retrieve, supportsSubtopic, reformulateQuery } from '../src/lib/rag.ts';
 import { documentMatch, legalReferences, fuseQueryHits } from '../src/lib/search.ts';
 
-const result = { intencion: 'Acceso a educación superior', subtemas: ['cupos especiales universidad indígenas', 'financiación educación superior ICETEX'], falta: '¿En qué universidad quieres estudiar?' };
+const result = { tipo: 'consulta', alcance: 'puntual', respuesta: null, intencion: 'Acceso a educación superior', subtemas: ['cupos especiales universidad indígenas', 'financiación educación superior ICETEX'], falta: '¿En qué universidad quieres estudiar?' };
 const raw = JSON.stringify(result);
 const sharedStubs = { embed: async queries => queries.map(() => null),
   prepare: async () => ({ approvedDocumentIds: [], topicDocs: new Set(), lexicalIndex: false }) };

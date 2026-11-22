@@ -1,13 +1,13 @@
 import assert from 'node:assert/strict';
 Object.assign(process.env,{LLM_PROVIDER:'gemini',GEMINI_API_KEY:'test-stub-only',GEMINI_RPM:'4',RAIZIA_MODO:'test'});
 const calls=[];
-const parsed={intencion:'Acceso universitario',subtemas:['cupos especiales indígenas','financiación educación superior'],falta:'¿En qué universidad quieres estudiar?'};
+const parsed={tipo:'consulta',alcance:'puntual',respuesta:null,intencion:'Acceso universitario',subtemas:['cupos especiales indígenas','financiación educación superior'],falta:'¿En qué universidad quieres estudiar?'};
 globalThis.fetch=async (url, options)=>{
   assert.match(url,/:generateContent$/);
   const body=JSON.parse(options.body); calls.push(body);
   assert.equal(body.generationConfig.temperature,0);
   assert.equal(body.generationConfig.responseMimeType,'application/json');
-  assert.deepEqual(body.generationConfig.responseSchema.required,['intencion','subtemas','falta']);
+  assert.deepEqual(body.generationConfig.responseSchema.required,['tipo','alcance','respuesta','intencion','subtemas','falta']);
   if(calls.length===1) return Response.json({candidates:[{content:{parts:[{text:'{}'}]}}]});
   if(calls.length===3) return new Response('',{status:429,headers:{'retry-after':'60'}});
   return Response.json({candidates:[{content:{parts:[{text:JSON.stringify(parsed)}]}}]});

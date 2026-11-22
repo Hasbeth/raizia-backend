@@ -1,0 +1,23 @@
+import assert from 'node:assert/strict';
+import { assertGeminiSchema } from '../support/gemini-schema.mjs';
+process.env.GEMINI_API_KEY = 'CLAVE-FICTICIA-SOLO-STUB';
+process.env.LLM_PROVIDER = 'gemini';
+process.env.RAIZIA_MODO = '';
+process.env.GEMINI_RPM = '100';
+const story = 'Me negaron una solicitud ficticia.';
+let requests = 0;
+globalThis.fetch = async (url, init) => {
+  assert.match(String(url), /:generateContent$/);
+  const body = JSON.parse(init.body);
+  assert.equal(body.generationConfig.responseMimeType, 'application/json');
+  assertGeminiSchema(body.generationConfig.responseSchema);
+  assert.equal(body.generationConfig.temperature, 0);
+  assert.match(body.systemInstruction.parts[0].text, /DATOS NO CONFIABLES/);
+  assert.ok(!body.systemInstruction.parts[0].text.includes(story));
+  assert.ok(body.contents[0].parts[0].text.includes(story));
+  return Response.json({ candidates: [{ content: { parts: [{ text: ++requests === 1 ? '{inválido' : JSON.stringify({ respuesta: 'Gracias por contarme lo que pasó.', pregunta: '¿Quién te está afectando?', propuestas: [{ campo: 'hechos', valor: story, cita_literal: story }], faltan: ['accionado'], peligro: false }) }] } }] });
+};
+const { askGeminiJSON } = await import('../../src/lib/rag.ts');
+const { converse, parseConversationInput } = await import('../../src/lib/tool-conversation.ts');
+const result = await converse(parseConversationInput({ kind: 'tutela', mensajes: [{ role: 'user', content: story }], confirmados: {} }), { ask: askGeminiJSON });
+assert.equal(requests, 2); assert.equal(result.propuestas[0].valor, story); assert.equal(result.respaldo, undefined);

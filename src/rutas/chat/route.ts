@@ -1,6 +1,6 @@
 import type { ChatEvent } from "@/lib/constants";
 import { suggestTool } from "@/lib/tools-config";
-import { generateAnswer, isSmallTalk, ollamaStatus, retrieve, STATIC_GREETING } from "@/lib/rag";
+import { generateAnswer, isSmallTalk, ollamaStatus, retrieve, smallTalkReply } from "@/lib/rag";
 import { checkChatLimit, CHAT_LIMIT_MESSAGE } from "@/lib/rate-limit";
 import { resolveIdentity } from "@/lib/identity";
 export const runtime = "nodejs";
@@ -37,19 +37,26 @@ export async function POST(req: Request) {
         territory: clip(body?.profile?.territory),
     };
     const previousUser = [...history].reverse().find((m) => m.role === "user")?.content || "";
-    const identityQuestion = resolveIdentity(message, profile, history).question;
+    let identityQuestion = resolveIdentity(message, profile, history).question;
     const encoder = new TextEncoder();
     const stream = new ReadableStream<Uint8Array>({
         async start(controller) {
             let subtemas: string[] = [];
             const send = (e: ChatEvent) => controller.enqueue(encoder.encode(JSON.stringify(e.type === "meta" ? { ...e, subtemas, identityQuestion } : e) + "\n"));
             try {
-                // Saludos y charla breve no necesitan buscar; el resto siempre pasa por la biblioteca.
+                // La reformulación clasifica antes de consultar la biblioteca.
                 const retrieval = smallTalk
-                    ? { topics: [], hits: [], sources: [], subtemas: [], reformulation: null, clarification: null }
+                    ? { topics: [], hits: [], sources: [], subtemas: [], reformulation: null, clarification: null, reply: smallTalkReply(message, history) }
                     : await retrieve(message, previousUser, profile, history, { signal: req.signal });
                 const { topics, hits, sources, reformulation, clarification } = retrieval;
                 subtemas = retrieval.subtemas;
+                if (retrieval.reply) {
+                    identityQuestion = undefined;
+                    send({ type: "meta", mode: "conversacion", topics: [], sources: [] });
+                    send({ type: "token", text: retrieval.reply });
+                    send({ type: "done" });
+                    return;
+                }
                 const topicList = topics.map((t) => ({ id: t.id, name: t.name }));
                 const tool = smallTalk ? undefined : suggestTool(message) || undefined;
                 if (clarification) {
@@ -85,7 +92,7 @@ export async function POST(req: Request) {
                     }
                     else if (smallTalk) {
                         send({ type: "meta", mode: "conversacion", topics: [], sources: [] });
-                        send({ type: "token", text: STATIC_GREETING });
+                        send({ type: "token", text: smallTalkReply(message, history) });
                     }
                     else {
                         send({ type: "meta", mode: "sin_resultados", topics: topicList, sources: [] });

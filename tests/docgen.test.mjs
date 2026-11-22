@@ -51,7 +51,7 @@ test('Tutela: cinco fundamentos de procedencia construidos con respuestas y medi
   assert.equal(urgent.sections.find(s => s.id === 'notificaciones').title, 'X. NOTIFICACIONES');
   assert.match(model.sections.find(s => s.id === 'pretensiones').paragraphs[0], /Responsable:.*Plazo solicitado:.*Verificación del cumplimiento:/s);
   assert.match(model.sections.find(s => s.id === 'pruebas').paragraphs[1], /Demuestra: Que negaron la copia/);
-  assert.ok(buildModel('tutela', { ...caseData, juramento: '' }).missing.some(s => s.includes('juramento')));
+  assert.match(buildModel('tutela', { ...caseData, juramento: '' }).sections.find(s => s.id === 'juramento').paragraphs[0], /Confirmación pendiente/);
 });
 test('Desacato e impugnación: hechos, pedidos, fundamentos y distinción de caminos', () => {
   const contempt = buildModel('desacato', { ...caseData, tercero: 'TERCERO FICTICIO' });
@@ -68,9 +68,10 @@ test('Revisión: rojo solo datos inválidos; debilidades amarillas por cada pret
   assert.equal(reviewQuality('peticion', caseData).level, 'green');
   const weak = reviewQuality('tutela', { ...caseData, cuando: '', hechos: 'La entidad negó la solicitud.', pretensiones: 'Que me ayuden', actuaciones: 'No', pruebasApoyo: '9', hechosApoyo: '', plazos: '' });
   assert.equal(weak.level, 'red');
-  for (const field of ['hechos', 'pretensiones', 'actuaciones', 'pruebasApoyo', 'hechosApoyo', 'plazos']) assert.ok(weak.issues.some(i => i.field === field), field);
+  for (const field of ['hechos', 'pretensiones', 'actuaciones', 'pruebasApoyo', 'plazos']) assert.ok(weak.issues.some(i => i.field === field), field);
+  assert.equal(weak.issues.some(i => i.field === 'hechosApoyo'), false);
   const multiple = reviewQuality('tutela', { ...caseData, pretensiones: `${caseData.pretensiones}\nQue se entregue otro documento ficticio.` });
-  assert.ok(multiple.issues.some(i => i.message.includes('Pedido 2') && i.field === 'pruebasApoyo'));
+  assert.equal(multiple.issues.some(i => i.message.includes('Pedido 2') && i.field === 'pruebasApoyo'), false);
 });
 test('Sección editada y faltantes son idénticos en modelo y Word; campos ajenos se descartan', async () => {
   const data = { ...caseData, edicion_hechos: 'Primero. TEXTO FICTICIO EDITADO [completar: fecha exacta]' };

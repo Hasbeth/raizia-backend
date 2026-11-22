@@ -22,6 +22,10 @@ export async function POST(req: Request, ctx: {
         if (Array.isArray(v) && (v.length > 100 || v.some(item => typeof item !== "string" || item.length > 8000))) return Response.json({ error: "Una respuesta es demasiado larga o no es válida." }, { status: 400 });
         data[f.name] = Array.isArray(v) ? v.map(String) : String(v ?? "");
     }
+    // Conserva referencias de borradores anteriores; la entrevista ya no las pide.
+    if (kind === "tutela") for (const key of ["hechosApoyo", "pruebasApoyo"]) {
+        if (typeof body[key] === "string" && body[key].length <= 8000) data[key] = body[key];
+    }
     const errors = validateTool(config, data);
     const missing = config.confirmations.filter((c) => body[c.name] !== "si");
     if (Object.keys(errors).length || missing.length) {

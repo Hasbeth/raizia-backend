@@ -72,7 +72,7 @@ test('IP hasheada; x-real-ip de respaldo, sin IP en SQL ni logs de errores', asy
 test('429 normal con Retry-After; saludos no consumen cupos ni buscan', async () => {
   const message = 'Hay muchas consultas en este momento. Espera un momento y vuelve a preguntar.';
   let calls = 0;
-  const { POST } = routeHarness({ rag: { isSmallTalk: m => m === 'hola', ollamaStatus: async () => ({ available: false }), STATIC_GREETING: 'Hola' }, rateLimit: {
+  const { POST } = routeHarness({ rag: { isSmallTalk: m => m === 'hola', smallTalkReply: () => 'Hola' }, rateLimit: {
     CHAT_LIMIT_MESSAGE: message, checkChatLimit: async () => { calls++; return { allowed: false, retryAfter: 30 }; },
   } })('chat');
   const send = text => POST(new Request('http://localhost/api/chat', { method: 'POST', body: JSON.stringify({ message: text }) }));
