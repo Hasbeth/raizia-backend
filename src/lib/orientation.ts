@@ -32,7 +32,7 @@ export const ORIENTATION_SCHEMA = { type: "OBJECT", properties: {
 export const ORIENTATION_PROMPT = `Eres el orientador de RAIZIA. Habla siempre de tú. Usa las Ruta RAIZIA para explicar pasos prácticos: orden, entidad, qué llevar, qué decir y qué hacer si no responden, con citas. Las obligaciones legales siguen requiriendo norma o sentencia. Analiza TODO relato usando exclusivamente la biblioteca adjunta. Devuelve SOLO el JSON del esquema, sin markdown ni campos adicionales.
 entendi: repite SOLO lo que dijo la persona, mediante extractos LITERALES de su relato y respuestas. Las preguntas previas del relato ampliado NO son hechos de la persona: no las resumas como hechos. Nunca supongas agresión, delito, pertenencia étnica, autor o lugar. El perfil no añade hechos al relato.
 Si el relato NO dice quién lo hace o en qué situación ocurre, pregunta primero, hasta 2 preguntas breves, con rutas vacías. Si la situación básica YA se conoce (por ejemplo, una EPS no entrega un medicamento o un jefe discrimina en el trabajo), oriéntala de una vez: devuelve hasta 3 rutas condicionadas y como máximo 1 pregunta que afine el camino. En discriminación averigua: quién lo hace (persona, trabajo, colegio, entidad, negocio, redes), dónde, qué hicieron o dijeron, amenazas o violencia, repetición y pruebas. Pregunta por lo que aún falta; usa opciones cuando sirvan. En turnos siguientes considera las respuestas ya aportadas. No preguntes todo a la vez.
-rutas: hasta 3, id del conjunto cerrado, ordenadas desde lo primero que la persona puede hacer hoy hasta el último recurso. Cada ruta trae de 2 a 4 pasos concretos: a quién acudir, qué llevar, qué decir y qué hacer si no responden. Tu pregunta debe cambiar el camino: nunca preguntes lo que la persona ya respondió ni si tiene a la mano un documento. Si ya está claro, no hagas pregunta. Nunca anticipes lo que decidirá un juez o entidad. No inventes títulos ni herramientas. por_que, condicion y cada paso jurídico llevan citas [n] válidas, además del array citas. Las condiciones comienzan con "Si…", por ejemplo "Si ocurre en tu trabajo…", "Si una entidad te negó un servicio…", "Si hubo amenazas…", únicamente con respaldo en fuentes. Cada afirmación debe estar sustentada; no prometas resultados ni afirmes que un hecho es delito.
+rutas: hasta 3, id del conjunto cerrado, ordenadas desde lo primero que la persona puede hacer hoy hasta el último recurso. Cada ruta trae de 2 a 4 pasos concretos: a quién acudir, qué llevar, qué decir y qué hacer si no responden. Tu pregunta debe cambiar el camino: nunca preguntes lo que la persona ya respondió ni si tiene a la mano un documento. Si ya está claro, no hagas pregunta. Nunca anticipes lo que decidirá un juez o entidad. No digas que un paso es obligatorio o requisito previo salvo que la fuente citada lo diga. Para quejas ante la Supersalud usa la ruta acompanamiento; proteccion es solo para miedo, presión o amenazas contadas por la persona. No inventes títulos ni herramientas. por_que, condicion y cada paso jurídico llevan citas [n] válidas, además del array citas. Las condiciones comienzan con "Si…", por ejemplo "Si ocurre en tu trabajo…", "Si una entidad te negó un servicio…", "Si hubo amenazas…", únicamente con respaldo en fuentes. Cada afirmación debe estar sustentada; no prometas resultados ni afirmes que un hecho es delito.
 El motivo importa. Si ciudad o región de origen no aparece EXPRESAMENTE como motivo en el texto normativo recuperado, dilo claramente y explica que requiere valoración, sin afirmar que encaja ni negar otros caminos. No conviertas nacionalidad en ciudad de origen.
 urgencia inmediata solo ante peligro explícito. Nunca añadas peligro ni violencia al resumir una discriminación.
 ${IDENTITY_RULES}
@@ -99,6 +99,11 @@ export async function orientWithLibrary(input: { text: string; current?: string;
     const entendi = plan.entendi.every(s => literal.some(part => normalize(part).includes(normalize(s)))) ? plan.entendi : literal;
     // Con rutas ya útiles, solo queda una pregunta para afinar; sin ellas se aclara primero.
     if (plan.rutas.length) plan.preguntas = plan.preguntas.slice(0, 1);
+    // "Si hay miedo o presión" solo aparece cuando la persona lo cuenta.
+    if (!/miedo|amenaz|presion|intimid|hostig|violenc/.test(normalize(text))) {
+      const seen = new Set<string>();
+      plan.rutas = plan.rutas.map(r => r.id === "proteccion" ? { ...r, id: "acompanamiento" } : r).filter(r => !seen.has(r.id) && !!seen.add(r.id));
+    }
     const claims = plan.rutas.flatMap(r => [r.por_que, r.condicion, ...r.pasos].map(line => ({
       text: line.replace(/\s*\[[\d,\s]+\]/g, "").trim(),
       citations: [...line.matchAll(/\[([\d,\s]+)\]/g)].flatMap(m => m[1].split(",").map(Number)).filter(n => r.citas.includes(n)),
@@ -117,8 +122,11 @@ export async function orientWithLibrary(input: { text: string; current?: string;
         cases.push(renderClaim(f, library.hits)); return false;
       });
       const citations = [...new Set([...fields.slice(0, 2), ...steps].flatMap(f => f.citations))];
-      return [{ id: r.id, title: DEFS[r.id].title, tool: DEFS[r.id].tool, issue: entendi[0],
-        condition: renderClaim(fields[1], library.hits), why: renderClaim(fields[0], library.hits), steps: steps.map(f => renderClaim(f, library.hits)),
+      const supersalud = r.id === "acompanamiento" && steps.some(f => /supersalud|superintendencia nacional de salud/i.test(f.text));
+      return [{ id: r.id, title: supersalud ? "Quejarte ante la Supersalud" : DEFS[r.id].title, tool: DEFS[r.id].tool, issue: entendi[0],
+        condition: renderClaim(fields[1], library.hits), why: renderClaim(fields[0], library.hits).replace(/primer paso obligatorio/i, "primer paso recomendado"),
+        // Si ningún paso propio quedó respaldado, se muestran los pasos revisados del catálogo.
+        steps: steps.length ? steps.map(f => renderClaim(f, library.hits)) : buildRoute(r.id, text).steps,
         citations, sources: library.sources.filter(s => citations.includes(s.n)) }];
     });
     const danger = explicitDanger(text);
