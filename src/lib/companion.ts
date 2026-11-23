@@ -30,6 +30,7 @@ export const COMPANION_PROMPT = `Eres RAIZIA y acompañas a una persona de una c
 CONVERSACIÓN: normalmente de 1 a 3 frases cortas y como máximo UNA pregunta útil, al final. Reacciona primero a lo que acaba de decir, con algo concreto de su situación. No interrogues ni uses frases de formulario. No repitas "gracias por contarme". Nunca preguntes lo que ya dijo ni lo obvio: si se está quedando sin insulina o sin un medicamento, ya hay un riesgo y no preguntas si lo hay. Nunca preguntes si cree que vulneraron sus derechos. Si no entiendes aún el caso, no propongas una acción.
 RAZONA SIN MOSTRARLO: hechos, urgencia, derechos en juego, responsable, pruebas y barreras territoriales o económicas. Guárdalo en los campos del JSON.
 RECOMIENDA: cuando ya sepas qué pasó, quién responde, qué intentó y qué tan urgente es, elige tú el mecanismo y dilo en palabras simples: "podemos evaluar…". Pregunta si quiere que le ayudes a prepararlo. Si hay riesgo para la salud o la vida y el camino es tutela, pon medida_provisional en true y explica que se le puede pedir al juez que la valore por la urgencia. Nunca la presentes como garantía. proteccion solo si la persona cuenta miedo, presión o amenazas.
+SALUD: si una EPS vulnera la salud, la atención médica va antes que cualquier trámite. En casos graves, la tutela y el reclamo ante Supersalud pueden hacerse al mismo tiempo; el reclamo no es requisito previo. La tutela va contra la EPS; no propongas a Supersalud como accionada salvo que la persona cuente una falla de esa entidad. Nunca digas que algo ya fue radicado si la persona no lo dijo.
 SEGURIDAD: ante riesgo inmediato orienta primero a urgencias, al 123 o a un lugar seguro, sin esperar más datos y sin dramatizar. Nunca sugieras suspender, reducir ni cambiar una dosis.
 EXACTITUD: usa solo lo que dijo la persona y las FUENTES. No inventes hechos, entidades, plazos ni resultados. En respuesta no cites leyes, artículos ni sentencias; pon en citas los números de las fuentes que respaldan tu recomendación. Si algo es incierto, dilo.
 DATOS: no pidas cédula, teléfono, correo ni dirección; eso va después en un formulario privado.
@@ -55,7 +56,7 @@ export function medicalAlert(text: string): boolean {
   const t = norm(text);
   const medicine = /\b(?:insulina|medicamento|medicina|droga|tratamiento)\b/.test(t);
   const out = /\b(?:se me acabo|se acabo|ya no tengo|no me queda nada|no tengo nada|estoy sin|sin insulina)\b/.test(t);
-  const symptoms = /\b(?:desmay\w*|convuls\w*|inconscient\w*|no puedo respirar|me cuesta respirar|vomit\w* mucho|confundid\w*|descompens\w*)\b/.test(t);
+  const symptoms = /\b(?:desmay\w*|convuls\w*|inconscient\w*|no puedo respirar|me cuesta respirar|dolor (?:fuerte )?en el pecho|fiebre alta|sangrando|vomit\w* mucho|confundid\w*|descompens\w*)\b/.test(t);
   return medicine && out || symptoms;
 }
 export const MEDICAL_NOTICE = "Si ya no tienes el medicamento o te sientes mal, ve hoy a urgencias o llama al 123. No cambies ni suspendas la dosis por tu cuenta.";
@@ -155,7 +156,8 @@ export async function companionTurn(input: ConversationInput, deps: { ask: Ask; 
     const urgencia = (["inmediata", "alta", "normal"] as const).find(u => u === plan!.urgencia) || "normal";
     const medida = id === "tutela" && plan.medida_provisional === true && urgencia !== "normal";
     const mecanismo: Mechanism | null = id ? { id, title: DEFS[id].title, tool: DEFS[id].tool, medidaProvisional: medida, porque: typeof plan.por_que === "string" ? plan.por_que.trim().slice(0, 300) : "" } : null;
-    const propuestas: ConversationProposal[] = groundedProposals(Array.isArray(plan.propuestas) ? plan.propuestas : [], input);
+    const blamesRegulator = /(?:supersalud|superintendencia)[^.]{0,50}(?:no respond|no contest|neg[oó]|no hizo)/.test(norm(story));
+    const propuestas: ConversationProposal[] = groundedProposals(Array.isArray(plan.propuestas) ? plan.propuestas : [], input).filter(p => p.campo !== "accionado" || blamesRegulator || !/supersalud|superintendencia/.test(norm(p.valor)));
     const longest = [...users].sort((a, b) => b.length - a.length)[0];
     if (!deps.libre && !input.confirmados.hechos && !propuestas.some(p => p.campo === "hechos") && wordCount(longest) >= 6 && conversationFields(input.kind).some(f => f.name === "hechos")) propuestas.unshift({ campo: "hechos", valor: longest.trim(), cita_literal: longest.trim() });
     if (!deps.libre && input.kind === "tutela" && medida && !input.confirmados.medidaProvisional) propuestas.push({ campo: "medidaProvisional", valor: "Sí", cita_literal: longest.trim() });
