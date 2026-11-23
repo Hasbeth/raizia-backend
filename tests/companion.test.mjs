@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { cleanCompanionReply, companionTurn, isCaseTurn, medicalAlert, needsMoreStory, nextOpenQuestion, shouldSearch } from '../src/lib/companion.ts';
+import { sameQuestion, withoutQuestions, cleanCompanionReply, companionTurn, isCaseTurn, medicalAlert, needsMoreStory, nextOpenQuestion, shouldSearch } from '../src/lib/companion.ts';
 import { verifyAnswer } from '../src/lib/citation-verification.ts';
 import { checkOfficialSentence, officialNote, sentenceReferences } from '../src/lib/official-check.ts';
 
@@ -78,4 +78,14 @@ test('un paso práctico citado a la Ruta no se pierde; una norma sin respaldo s�
   const hit = { title: 'Ruta RAIZIA — Salud', heading: '', docType: 'Guía', entity: 'RAIZIA', docDate: '2026', content: 'Texto sobre otro asunto distinto.' };
   const out = await verifyAnswer('Primero presenta tu reclamo ante la EPS. [1]\nLa Ley 999 de 2020 te protege. [1]', [hit]);
   assert.match(out, /Primero presenta tu reclamo/); assert.doesNotMatch(out, /Ley 999/);
+});
+
+test('la tutela no insiste en la misma pregunta y los hechos no incluyen preguntas', async () => {
+  const asked = 'Entiendo. ¿Qué te han dicho exactamente en la EPS cuando has ido a reclamar?';
+  assert.equal(sameQuestion('Ahora, ¿me podrías contar qué te han dicho exactamente en la EPS cuando has ido a reclamar y si hay radicado?', asked), true);
+  assert.equal(sameQuestion('¿Qué pruebas tienes?', asked), false);
+  assert.equal(withoutQuestions('Sanitas no me entrega la insulina. ¿A quién acudo?'), 'Sanitas no me entrega la insulina.');
+  const r = await companionTurn({ ...input('x'), mensajes: [{ role: 'user', content: 'Sanitas no me entrega la insulina desde octubre. ¿Qué hago?' }, { role: 'assistant', content: asked }, { role: 'user', content: 'Tengo la fórmula' }] }, { ask: async () => plan({ respuesta: 'Bien. ¿Me cuentas qué te han dicho exactamente en la EPS cuando has ido a reclamar?' }), retrieve: async () => library });
+  assert.equal(sameQuestion(r.respuesta, asked), false);
+  assert.doesNotMatch(r.propuestas.find(p => p.campo === 'hechos').valor, /\?/);
 });

@@ -118,6 +118,19 @@ export function needsMoreStory(users: string[]): boolean {
   return users.length < 3 && wordCount(users.join(" ")) < 30 && !medicalAlert(users.at(-1) || "");
 }
 
+const questionWords = (text: string) => {
+  const start = text.lastIndexOf("¿");
+  return new Set((norm(start >= 0 ? text.slice(start) : "").match(/[a-z0-9]{4,}/g) || []).filter(w => !["podrias", "contar", "quieres", "tienes", "puedes", "algun", "alguna", "para", "como"].includes(w)));
+};
+/** Dos preguntas sobre lo mismo, aunque cambien algunas palabras. */
+export function sameQuestion(a: string, b: string): boolean {
+  const x = questionWords(a), y = questionWords(b);
+  if (!x.size || !y.size) return false;
+  return [...x].filter(w => y.has(w)).length / Math.min(x.size, y.size) >= 0.6;
+}
+/** Los hechos no incluyen lo que la persona preguntó. */
+export const withoutQuestions = (text: string) => text.replace(/[^.!?\n]*\?/g, "").replace(/\s+/g, " ").trim();
+
 function fallback(input: ConversationInput): CompanionResult {
   const alert = medicalAlert(input.mensajes.at(-1)?.content || "");
   return { respuesta: `${alert ? `${MEDICAL_NOTICE} ` : ""}Se me dificultó responder en este momento. Lo que me contaste sigue aquí; escríbeme de nuevo en un momento.`, pregunta: null, propuestas: [], faltan: conversationMissing(input.confirmados, input.kind), peligro: false, caso: emptyCase(), mecanismo: null, avanzar: false, fuentes: [] };
@@ -162,13 +175,20 @@ export async function companionTurn(input: ConversationInput, deps: { ask: Ask; 
     const blamesRegulator = /(?:supersalud|superintendencia)[^.]{0,50}(?:no respond|no contest|neg[oó]|no hizo)/.test(norm(story));
     const propuestas: ConversationProposal[] = groundedProposals(Array.isArray(plan.propuestas) ? plan.propuestas : [], input).filter(p => p.campo !== "accionado" || blamesRegulator || !/supersalud|superintendencia/.test(norm(p.valor)));
     const longest = [...users].sort((a, b) => b.length - a.length)[0];
-    if (!deps.libre && !input.confirmados.hechos && !propuestas.some(p => p.campo === "hechos") && wordCount(longest) >= 6 && conversationFields(input.kind).some(f => f.name === "hechos")) propuestas.unshift({ campo: "hechos", valor: longest.trim(), cita_literal: longest.trim() });
+    for (const p of propuestas) if (p.campo === "hechos") p.valor = withoutQuestions(p.valor) || p.valor;
+    const literalFacts = withoutQuestions(longest);
+    if (!deps.libre && !input.confirmados.hechos && !propuestas.some(p => p.campo === "hechos") && wordCount(literalFacts) >= 6 && conversationFields(input.kind).some(f => f.name === "hechos")) propuestas.unshift({ campo: "hechos", valor: literalFacts, cita_literal: longest.trim() });
     if (!deps.libre && input.kind === "tutela" && medida && !input.confirmados.medidaProvisional) propuestas.push({ campo: "medidaProvisional", valor: "Sí", cita_literal: longest.trim() });
     const tentative = { ...input.confirmados, ...Object.fromEntries(propuestas.map(p => [p.campo, p.valor])) };
-    const pending = deps.libre ? [] : conversationMissing(tentative, input.kind);
+    let pending = deps.libre ? [] : conversationMissing(tentative, input.kind);
     // Si la redacción falla o da por terminado lo que aún falta, se pregunta el siguiente dato pendiente.
-    if (!deps.libre && (!reply || (pending.length && /\b(?:ya tengo|tengo lo (?:principal|necesario)|datos privados)\b/.test(norm(reply))))) {
-      reply = pending.length ? conversationQuestions(input.kind, tentative)[pending[0]] : "Ya tenemos lo principal. Ahora te pido tus datos en un formulario privado y te muestro el borrador para revisarlo.";
+    const repeated = !deps.libre && !!reply && previousReplies.some(p => sameQuestion(reply as string, p));
+    if (!deps.libre && (!reply || repeated || (pending.length && /\b(?:ya tengo|ya tenemos|tengo lo (?:principal|necesario)|datos privados)\b/.test(norm(reply))))) {
+      const questions = conversationQuestions(input.kind, tentative);
+      // No insiste: si algo ya se preguntó, sigue con otro dato y lo demás se completa al revisar.
+      const next = pending.find(k => !previousReplies.some(p => sameQuestion(questions[k], p)));
+      if (!next) pending = [];
+      reply = next ? `Listo. ${questions[next]}` : "Ya tenemos lo principal. Ahora te pido tus datos en un formulario privado y te muestro el borrador para revisarlo.";
     }
     const finalReply = reply as string;
     const alert = medicalAlert(last) && !/urgencias|123/.test(norm(finalReply));
