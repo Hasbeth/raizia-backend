@@ -91,8 +91,10 @@ export async function orientWithLibrary(input: { text: string; current?: string;
     let plan: Plan | null = null;
     for (let attempt = 0; attempt < 2; attempt++) {
       signal.throwIfAborted();
-      plan = parseOrientation(await deps.ask(ORIENTATION_PROMPT + (attempt ? "\nEl JSON anterior era inválido; corrige el esquema estricto." : ""), data, signal, ORIENTATION_SCHEMA), library.hits.length);
-      if (plan) break;
+      const next = parseOrientation(await deps.ask(ORIENTATION_PROMPT + (attempt ? "\nTu respuesta anterior no sirvió: devuelve JSON válido. La persona ya contó su situación y respondió preguntas, así que incluye rutas con pasos." : ""), data, signal, ORIENTATION_SCHEMA), library.hits.length);
+      plan = next ?? plan;
+      // Si la persona ya respondió varias preguntas, no se le devuelve otra pregunta sin camino.
+      if (plan && (plan.rutas.length || userNarrativeParts(text).length < 3)) break;
     }
     if (!plan) { console.warn("orientar_fallback motivo=json_invalido"); return fallback(); }
     const literal = userNarrativeParts(text);
@@ -115,16 +117,18 @@ export async function orientWithLibrary(input: { text: string; current?: string;
     const routes = plan.rutas.flatMap(r => {
       const fields = checked.slice(at, at + 2 + r.pasos.length); at += fields.length;
       // La condición ("si ocurre en tu trabajo…") describe el caso: no necesita cita propia.
-      if (!fields[0].citations.some(n => sourceKind(library.hits[n - 1]) !== "contexto" || /^Ruta RAIZIA/i.test(library.hits[n - 1]?.title || ""))) return [];
+      const trusted = fields[0].citations.some(n => sourceKind(library.hits[n - 1]) !== "contexto" || /^Ruta RAIZIA/i.test(library.hits[n - 1]?.title || ""));
+      // Con el caso ya aclarado, una explicación sin respaldo se cambia por la del catálogo revisado.
+      if (!trusted && literal.length < 3) return [];
       const steps = fields.slice(2).filter(f => f.citations.length && !PROMISED_OUTCOME.test(normalize(f.text))).filter(f => {
         if (!f.citations.some(n => sourceKind(library.hits[n - 1]) === "contexto")) return true;
         if (/^Ruta RAIZIA/i.test(library.hits[f.citations[0] - 1]?.title || "")) return true;
         cases.push(renderClaim(f, library.hits)); return false;
       });
-      const citations = [...new Set([...fields.slice(0, 2), ...steps].flatMap(f => f.citations))];
+      const citations = [...new Set([...(trusted ? fields.slice(0, 2) : []), ...steps].flatMap(f => f.citations))];
       const supersalud = r.id === "acompanamiento" && steps.some(f => /supersalud|superintendencia nacional de salud/i.test(f.text));
       return [{ id: r.id, title: supersalud ? "Quejarte ante la Supersalud" : DEFS[r.id].title, tool: DEFS[r.id].tool, issue: entendi[0],
-        condition: renderClaim(fields[1], library.hits), why: renderClaim(fields[0], library.hits).replace(/primer paso obligatorio/i, "primer paso recomendado"),
+        condition: renderClaim(fields[1], library.hits), why: trusted ? renderClaim(fields[0], library.hits).replace(/primer paso obligatorio/i, "primer paso recomendado") : DEFS[r.id].why,
         // Si ningún paso propio quedó respaldado, se muestran los pasos revisados del catálogo.
         steps: steps.length ? steps.map(f => renderClaim(f, library.hits)) : buildRoute(r.id, text).steps,
         citations, sources: library.sources.filter(s => citations.includes(s.n)) }];
