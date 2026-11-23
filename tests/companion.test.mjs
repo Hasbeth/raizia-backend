@@ -89,3 +89,10 @@ test('la tutela no insiste en la misma pregunta y los hechos no incluyen pregunt
   assert.equal(sameQuestion(r.respuesta, asked), false);
   assert.doesNotMatch(r.propuestas.find(p => p.campo === 'hechos').valor, /\?/);
 });
+
+test('la medida urgente reutiliza lo pedido y no repite datos confirmados', async () => {
+  const said = 'Quiero que me entreguen la insulina completa en Minca';
+  const r = await companionTurn({ ...input(said), confirmados: { medidaProvisional: 'Sí', cuando: 'desde el 3 de octubre' } }, { ask: async () => plan({ propuestas: [{ campo: 'pretensiones', valor: said, cita_literal: said }] }), retrieve: async () => library });
+  assert.equal(r.propuestas.find(p => p.campo === 'medida').valor, said);
+  assert.ok(!r.faltan.includes('medida'));
+});

@@ -179,6 +179,18 @@ export async function companionTurn(input: ConversationInput, deps: { ask: Ask; 
     const literalFacts = withoutQuestions(longest);
     if (!deps.libre && !input.confirmados.hechos && !propuestas.some(p => p.campo === "hechos") && wordCount(literalFacts) >= 6 && conversationFields(input.kind).some(f => f.name === "hechos")) propuestas.unshift({ campo: "hechos", valor: literalFacts, cita_literal: longest.trim() });
     if (!deps.libre && input.kind === "tutela" && medida && !input.confirmados.medidaProvisional) propuestas.push({ campo: "medidaProvisional", valor: "Sí", cita_literal: longest.trim() });
+    // Lo ya confirmado no se vuelve a proponer con otras palabras.
+    for (let i = propuestas.length - 1; i >= 0; i--) {
+      const known = norm(String(input.confirmados[propuestas[i].campo] || "")), value = norm(propuestas[i].valor);
+      if (propuestas[i].campo !== "hechosAdicionales" && known && (known.includes(value) || value.includes(known))) propuestas.splice(i, 1);
+    }
+    // Si ya dijo qué necesita, esa misma orden sirve como medida urgente: no se pregunta otra vez.
+    const asked = propuestas.find(p => p.campo === "pretensiones");
+    const wanted = asked?.valor || (typeof input.confirmados.pretensiones === "string" ? input.confirmados.pretensiones : "");
+    const urgentMeasure = input.confirmados.medidaProvisional === "Sí" || propuestas.some(p => p.campo === "medidaProvisional" && p.valor === "Sí");
+    if (!deps.libre && input.kind === "tutela" && urgentMeasure && wanted && !input.confirmados.medida && !propuestas.some(p => p.campo === "medida")) {
+      propuestas.push({ campo: "medida", valor: wanted, cita_literal: asked?.cita_literal || users.find(u => /\b(?:quiero|necesito|que me)\b/i.test(u))?.trim() || longest.trim() });
+    }
     const tentative = { ...input.confirmados, ...Object.fromEntries(propuestas.map(p => [p.campo, p.valor])) };
     let pending = deps.libre ? [] : conversationMissing(tentative, input.kind);
     // Si la redacción falla o da por terminado lo que aún falta, se pregunta el siguiente dato pendiente.
