@@ -104,6 +104,17 @@ export function isCaseTurn(message: string, history: { role: string; content: st
   return previous.endsWith("?") || personal;
 }
 
+const OPEN_QUESTIONS = ["¿Qué te han respondido cuando has reclamado?", "¿Quién te dio esa respuesta?", "¿Desde cuándo está pasando?", "¿Te ofrecieron alguna otra solución?"];
+/** Último recurso: una pregunta que todavía no se haya hecho en esta conversación. */
+export function nextOpenQuestion(previous: string[]): string {
+  const asked = previous.map(norm).join(" ");
+  return OPEN_QUESTIONS.find(q => !asked.includes(norm(q))) || "Con lo que me cuentas ya podemos buscar una salida. ¿Quieres que revisemos qué camino te sirve?";
+}
+/** Un relato con suficientes detalles ya permite orientar, aunque sea el primer mensaje. */
+export function needsMoreStory(users: string[]): boolean {
+  return users.length < 3 && wordCount(users.join(" ")) < 30 && !medicalAlert(users.at(-1) || "");
+}
+
 function fallback(input: ConversationInput): CompanionResult {
   const alert = medicalAlert(input.mensajes.at(-1)?.content || "");
   return { respuesta: `${alert ? `${MEDICAL_NOTICE} ` : ""}Se me dificultó responder en este momento. Lo que me contaste sigue aquí; escríbeme de nuevo en un momento.`, pregunta: null, propuestas: [], faltan: conversationMissing(input.confirmados, input.kind), peligro: false, caso: emptyCase(), mecanismo: null, avanzar: false, fuentes: [] };
@@ -120,7 +131,8 @@ export async function companionTurn(input: ConversationInput, deps: { ask: Ask; 
     const faltan = deps.libre ? [] : conversationMissing(input.confirmados, input.kind);
     const data = JSON.stringify({ herramienta: deps.libre ? null : TOOLS[input.kind].name, faltan, confirmados: deps.libre ? {} : input.confirmados, campos: conversationFields(input.kind).map(f => f.name), mensajes: input.mensajes,
       mecanismos: Object.values(DEFS).map(d => ({ id: d.id, nombre: d.title })), fuentes: hits.map((h, i) => ({ n: i + 1, documento: h.title, texto: h.content.slice(0, /^Ruta RAIZIA/.test(h.title) ? 2600 : 800) })) });
-    const early = !!deps.libre && users.length < 3 && !medicalAlert(last);
+    const early = !!deps.libre && needsMoreStory(users);
+    const previousReplies = input.mensajes.filter(m => m.role === "assistant").map(m => m.content);
     let plan: Record<string, unknown> | null = null, reply: string | null = null;
     for (let attempt = 0; attempt < 2 && !reply; attempt++) {
       signal.throwIfAborted();
@@ -129,11 +141,14 @@ export async function companionTurn(input: ConversationInput, deps: { ask: Ask; 
         if (value && typeof value === "object") {
           plan = value; reply = cleanCompanionReply(value.respuesta, story);
           // En el relato libre no se ofrece un mecanismo antes de comprender el caso.
-          if (reply && early && MECHANISM_WORDS.test(norm(reply))) reply = attempt ? "Te sigo. ¿Qué pasó cuando intentaste resolverlo?" : null;
+          if (reply && early && MECHANISM_WORDS.test(norm(reply))) reply = attempt ? (reply.match(/[^.!?]+[.!?]+/g) || []).map(s => s.trim()).filter(s => !MECHANISM_WORDS.test(norm(s))).join(" ") || null : null;
+          // Nunca repite un turno anterior.
+          if (reply && previousReplies.some(p => norm(p) === norm(reply as string))) reply = null;
         }
       } catch (error) { if (signal.aborted) throw error; }
     }
-    if (!plan || (!reply && deps.libre)) return null;
+    if (!plan) return null;
+    if (!reply && deps.libre) reply = nextOpenQuestion(previousReplies);
     const rawId = !early && typeof plan.mecanismo === "string" && ROUTE_IDS.includes(plan.mecanismo) ? plan.mecanismo : null;
     const id = rawId === "proteccion" && !/miedo|amenaz|presion|intimid|hostig|violenc/.test(norm(story)) ? "acompanamiento" : rawId;
     const urgencia = (["inmediata", "alta", "normal"] as const).find(u => u === plan!.urgencia) || "normal";

@@ -34,7 +34,7 @@ export async function POST(req: Request) {
   const { input, action } = parsed;
   if (explicitDanger(input.mensajes.at(-1)?.content || "")) return Response.json(fallbackConversation(input), { headers });
   const limit = await checkChatLimit(req);
-  if (!limit.allowed) return Response.json({ ...fallbackConversation(input), respuesta: CHAT_LIMIT_MESSAGE + " Puedes continuar paso a paso; tu texto se conserva." }, { status: 429, headers: { ...headers, "Retry-After": String(limit.retryAfter) } });
+  if (!limit.allowed) return Response.json({ ...fallbackConversation(input), respuesta: (limit.message || CHAT_LIMIT_MESSAGE) + " Puedes continuar paso a paso; tu texto se conserva." }, { status: 429, headers: { ...headers, "Retry-After": String(limit.retryAfter) } });
   if (action) return Response.json(await assistTool(input, action, { ask: askGeminiJSON, retrieve: (text, signal) => retrieve(text, "", undefined, [], { signal, reformulate: async () => null }), signal: req.signal }), { headers });
   return Response.json(await companionTurn(input, { ask: askGeminiJSON, signal: req.signal, retrieve: (text, signal) => retrieve(text, "", undefined, [], { signal, reformulate: async () => null }) }), { headers });
 }

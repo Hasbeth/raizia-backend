@@ -35,7 +35,7 @@ try {
  const concurrent=await Promise.all(Array.from({length:20},()=>checkChatLimit(rateRequest,rateNow)));
  assert.equal(concurrent.filter(r=>r.allowed).length,12,'Incrementos atómicos concurrentes en PGlite');
  const savedRates=await query('SELECT bucket,count FROM rate_limits');
- assert.equal(savedRates.find(r=>r.bucket.startsWith('chat:minute:')).count,20);
+ assert.equal(savedRates.find(r=>r.bucket.startsWith('chat:minute:')).count,12);
  assert.ok(!JSON.stringify(savedRates).includes('203.0.113.42'));
  await tx(async()=>{
    await query("INSERT INTO rate_limits VALUES('old',CURRENT_TIMESTAMP-interval '3 days',1),('edge',CURRENT_TIMESTAMP-interval '2 days',1),('fresh',CURRENT_TIMESTAMP,1)");

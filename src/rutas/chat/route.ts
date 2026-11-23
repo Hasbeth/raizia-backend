@@ -23,7 +23,7 @@ export async function POST(req: Request) {
     const smallTalk = isSmallTalk(message);
     if (!smallTalk) {
         const limit = await checkChatLimit(req);
-        if (!limit.allowed) return Response.json({ message: CHAT_LIMIT_MESSAGE }, {
+        if (!limit.allowed) return Response.json({ message: limit.message || CHAT_LIMIT_MESSAGE, window: limit.window }, {
             status: 429,
             headers: { "Retry-After": String(limit.retryAfter), "Cache-Control": "no-store" },
         });

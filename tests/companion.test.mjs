@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { cleanCompanionReply, companionTurn, isCaseTurn, medicalAlert, shouldSearch } from '../src/lib/companion.ts';
+import { cleanCompanionReply, companionTurn, isCaseTurn, medicalAlert, needsMoreStory, nextOpenQuestion, shouldSearch } from '../src/lib/companion.ts';
 import { checkOfficialSentence, officialNote, sentenceReferences } from '../src/lib/official-check.ts';
 
 const library = { topics: [], hits: [], sources: [], subtemas: [], reformulation: null, clarification: null };
@@ -39,6 +39,19 @@ test('falla del modelo: conserva el relato sin inventar y evita buscar en cada t
   assert.equal(r.mecanismo, null); assert.match(r.respuesta, /sigue aquí/);
   assert.equal(shouldSearch(['Tengo diabetes y la EPS no me entrega la insulina desde hace meses', 'No']), false);
   assert.equal(shouldSearch(['Tengo diabetes y la EPS no me entrega la insulina', 'Vivo por Minca y no tengo plata']), true);
+});
+
+test('un relato completo orienta desde el inicio y nunca repite el turno anterior', async () => {
+  const story = 'Sufro del azúcar y en la farmacia me dicen que no hay medicamentos, llevo tres semanas así, estoy a cinco días de quedarme sin ellos y no sé qué hacer, estoy bastante asustado';
+  assert.equal(needsMoreStory([story]), false);
+  assert.equal(needsMoreStory(['Tengo un problema con una medicina']), true);
+  const offer = 'Eso preocupa. Podemos evaluar una tutela con medida provisional. ¿Quieres que te ayude a prepararla?';
+  const first = await companionTurn(input(story), { libre: true, ask: async () => plan({ respuesta: offer, mecanismo: 'tutela', medida_provisional: true }), retrieve: async () => library });
+  assert.equal(first.mecanismo.id, 'tutela'); assert.equal(first.respuesta, offer);
+  const repeated = 'Eso preocupa. ¿Qué te han respondido?';
+  const second = await companionTurn({ ...input(story), mensajes: [{ role: 'user', content: story }, { role: 'assistant', content: repeated }, { role: 'user', content: 'Solo que hay que esperar' }] }, { libre: true, ask: async () => plan({ respuesta: repeated }), retrieve: async () => library });
+  assert.notEqual(second.respuesta, repeated);
+  assert.notEqual(nextOpenQuestion(['¿Qué te han respondido cuando has reclamado?']), '¿Qué te han respondido cuando has reclamado?');
 });
 
 test('el asistente conversa un relato y responde directo una pregunta concreta', () => {

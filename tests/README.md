@@ -1,7 +1,7 @@
 # Pruebas de RAIZIA · Backend
 
 Límite compartido de `/api/chat` y `/api/tools/orientar`: `CHAT_LIMIT_IP_PER_MINUTE` (12),
-`CHAT_LIMIT_IP_PER_DAY` (80) y `CHAT_LIMIT_GLOBAL_PER_DAY` (1500).
+`CHAT_LIMIT_IP_PER_DAY` (300) y `CHAT_LIMIT_GLOBAL_PER_DAY` (1500).
 Aceptan enteros positivos. Las ventanas usan UTC; los saludos no consumen cupo.
 El orientador devuelve orientación general con aviso visible y `Retry-After` si
 se agota el cupo; no ejecuta recuperación ni generación en ese caso.

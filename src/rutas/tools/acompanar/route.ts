@@ -11,7 +11,7 @@ export async function POST(req: Request) {
   const input = parseConversationInput({ kind: "tutela", confirmados: {}, preguntados: {}, mensajes: raw?.mensajes });
   if (!input) return Response.json({ error: "Envía hasta 16 mensajes recientes de 2000 caracteres." }, { status: 400, headers });
   const limit = await checkChatLimit(req);
-  if (!limit.allowed) return Response.json({ error: CHAT_LIMIT_MESSAGE }, { status: 429, headers: { ...headers, "Retry-After": String(limit.retryAfter) } });
+  if (!limit.allowed) return Response.json({ error: limit.message || CHAT_LIMIT_MESSAGE }, { status: 429, headers: { ...headers, "Retry-After": String(limit.retryAfter) } });
   return Response.json(await companionTurn(input, { libre: true, ask: askGeminiJSON, signal: req.signal,
     retrieve: (text, signal) => retrieve(text, "", undefined, [], { signal, reformulate: async () => null }) }), { headers });
 }

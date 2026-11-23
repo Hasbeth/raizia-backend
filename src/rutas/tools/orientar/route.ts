@@ -9,7 +9,7 @@ export async function POST(req: Request) {
   if ((!explicitDanger(text) && text.length < 12) || text.length > 8000) return Response.json({ error: "Escribe un relato de entre 12 y 8000 caracteres." }, { status: 400 });
   const current = typeof body?.current === "string" ? body.current : "";
   const limit = await checkChatLimit(req);
-  if (!limit.allowed) return Response.json({ ...fallbackOrientation(text), limitNotice: CHAT_LIMIT_MESSAGE }, {
+  if (!limit.allowed) return Response.json({ ...fallbackOrientation(text), limitNotice: limit.message || CHAT_LIMIT_MESSAGE }, {
     headers: { "Retry-After": String(limit.retryAfter), "Cache-Control": "no-store" },
   });
   const clip = (v: unknown) => typeof v === "string" ? v.trim().slice(0, 80) : "";

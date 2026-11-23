@@ -27,7 +27,8 @@ const now = new Date('2026-11-21T13:00:15.000Z');
 test('12/min por primera IP; otra IP pasa y la siguiente ventana reinicia', async t => {
   const { checkChatLimit } = setup(t);
   for (let i = 0; i < 12; i++) assert.equal((await checkChatLimit(request('203.0.113.9, 10.0.0.1'), now)).allowed, true);
-  assert.deepEqual(await checkChatLimit(request(), now), { allowed: false, retryAfter: 45 });
+  const blocked = await checkChatLimit(request(), now);
+  assert.deepEqual([blocked.allowed, blocked.retryAfter, blocked.window], [false, 45, 'minuto']);
   assert.equal((await checkChatLimit(request('203.0.113.10'), now)).allowed, true);
   assert.equal((await checkChatLimit(request(), new Date('2026-11-21T13:01:00Z'))).allowed, true);
 });
@@ -51,7 +52,9 @@ test('Tope global configurable agrega IP diferentes', async t => {
 test('El tope global por defecto permite 1500 consultas y rechaza la 1501', async t => {
   const { checkChatLimit } = setup(t);
   for (let i = 0; i < 1500; i++) assert.equal((await checkChatLimit(request(`test-${i}`), now)).allowed, true);
-  assert.deepEqual(await checkChatLimit(request('test-1500'), now), {allowed:false,retryAfter:39585});
+  const blocked = await checkChatLimit(request('test-1500'), now);
+  assert.deepEqual([blocked.allowed, blocked.retryAfter, blocked.window], [false, 39585, 'global']);
+  assert.match(blocked.message, /tu conversación sigue aquí/);
 });
 
 test('IP hasheada; x-real-ip de respaldo, sin IP en SQL ni logs de errores', async t => {
