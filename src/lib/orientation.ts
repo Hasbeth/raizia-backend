@@ -122,7 +122,7 @@ export async function orientWithLibrary(input: { text: string; current?: string;
       if (!trusted && literal.length < 3) return [];
       const steps = fields.slice(2).filter(f => f.citations.length && !PROMISED_OUTCOME.test(normalize(f.text))).filter(f => {
         if (!f.citations.some(n => sourceKind(library.hits[n - 1]) === "contexto")) return true;
-        if (/^Ruta RAIZIA/i.test(library.hits[f.citations[0] - 1]?.title || "")) return true;
+        if (f.citations.some(n => /^Ruta RAIZIA/i.test(library.hits[n - 1]?.title || ""))) return true;
         cases.push(renderClaim(f, library.hits)); return false;
       });
       const citations = [...new Set([...(trusted ? fields.slice(0, 2) : []), ...steps].flatMap(f => f.citations))];
