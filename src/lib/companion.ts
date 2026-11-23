@@ -34,7 +34,7 @@ SEGURIDAD: ante riesgo inmediato orienta primero a urgencias, al 123 o a un luga
 EXACTITUD: usa solo lo que dijo la persona y las FUENTES. No inventes hechos, entidades, plazos ni resultados. En respuesta no cites leyes, artículos ni sentencias; pon en citas los números de las fuentes que respaldan tu recomendación. Si algo es incierto, dilo.
 DATOS: no pidas cédula, teléfono, correo ni dirección; eso va después en un formulario privado.
 HERRAMIENTA: si llega "herramienta", ya estás preparando ese documento. Pregunta solo por lo que esté en "faltan", el más importante primero y de forma natural, y usa lo ya contado. Si "faltan" está vacío, di que ya tienes lo principal y que ahora pedirás los datos privados y le mostrarás el borrador para revisarlo.
-avanzar: true solo si la persona acaba de aceptar que le ayudes a preparar el documento.
+avanzar: true solo si la persona acaba de aceptar que le ayudes a preparar el documento. Sin "herramienta", nunca digas que ya aceptó ni pidas datos: si ya ofreciste y cuenta algo nuevo, reacciona a eso y vuelve a preguntar si quiere que le ayudes a prepararlo.
 propuestas: en cada turno revisa TODOS los mensajes y extrae cada campo permitido que la persona ya respondió, aunque sea de forma parcial: accionado (por ejemplo "la EPS"), actuaciones ("he ido varias veces", "me dicen que no hay"), cuando, razonMedida ("me queda para cinco días"), medida y pretensiones si dijo qué quiere, y pruebas. No preguntes por un campo que acabas de extraer. cita_literal es copia exacta de un fragmento corto de un mensaje suyo; valor repite ese fragmento limpio, sin agregar nombres, fechas, cifras ni cambiar una negación.
 Sé breve: máximo 45 palabras por turno, sin "entiendo perfectamente" ni "lamento mucho". Antes de ofrecer un mecanismo averigua, una cosa por turno, qué pasó, quién responde, qué intentó, qué tan urgente es y si le dieron una solución.
 TONO Y PROGRESIÓN (ejemplo, no guion):
@@ -76,7 +76,8 @@ export function cleanCompanionReply(raw: unknown, story: string): string | null 
   if (/\b(?:insulina|medicamento|medicina)\b/.test(norm(story)) && /(?:hay|corre|corres|existe)[^?]*(?:peligro|riesgo)[^?]*\?/.test(t)) return null;
   if (/\b(?:vas a ganar|ganaras|te van a conceder|el juez ordenara|seguro te)\b/.test(t)) return null;
   // Los datos de identidad y contacto solo se piden en su formulario privado.
-  if (/\b(?:necesito|dame|dime|indicame|compart\w*|facilit\w*|escribe|podrias decirme)\b[^.?!]*\b(?:nombre completo|tu nombre|cedula|numero de documento|documento de identidad|telefono|celular|correo|direccion)\b/.test(t)) return null;
+  if (/\b(?:necesito|dame|dime|indicame|compart\w*|facilit\w*|escribe|podrias decirme)\b[^.?!]*\b(?:nombre completo|tu nombre|cedula|numero de documento|documento de identidad|telefono|celular|correo|direccion|datos personales)\b/.test(t)) return null;
+  if (/\bcomo ya aceptaste\b/.test(t)) return null;
   if (mark >= 0) { const start = text.lastIndexOf("¿"); if (start >= 0 && !validConversationQuestion(text.slice(start))) return null; }
   return text;
 }
@@ -86,7 +87,7 @@ export function shouldSearch(users: string[]): boolean {
   const last = users.at(-1) || "";
   return users.length >= 2 && wordCount(users.join(" ")) >= 10 && (wordCount(last) >= 4 || /\?/.test(last));
 }
-const OFFER = /\b(?:prepar\w*|ayude|ayudarte|empecemos|empezamos|redact\w*)\b/;
+const OFFER = /\b(?:prepar\w*|ayude|ayudarte|empecemos|empezamos|redact\w*|continu\w*|avanc\w*)\b/;
 /** Solo la aceptación expresa de una oferta lleva a la herramienta. */
 export function acceptedOffer(last: string, previous: string): boolean {
   return previous.trim().endsWith("?") && OFFER.test(norm(previous)) && /^\W*(?:si|sii+|dale|listo|claro|de una|bueno|ok|okay|va|hagale|por favor|ayudame|quiero|me parece|empecemos)\b/.test(norm(last)) && !/^\W*si\s+(?:pero|aunque)\b/.test(norm(last));
