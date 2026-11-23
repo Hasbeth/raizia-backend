@@ -59,6 +59,7 @@ export function medicalAlert(text: string): boolean {
   const symptoms = /\b(?:desmay\w*|convuls\w*|inconscient\w*|no puedo respirar|me cuesta respirar|dolor (?:fuerte )?en el pecho|fiebre alta|sangrando|vomit\w* mucho|confundid\w*|descompens\w*)\b/.test(t);
   return medicine && out || symptoms;
 }
+export const URGENT_REPLY = "Eso es urgente. Ve ya a urgencias o llama al 123, y pide que alguien te acompañe. No cambies ni suspendas la dosis por tu cuenta. Cuando estés a salvo, seguimos con el reclamo.";
 export const MEDICAL_NOTICE = "Si ya no tienes el medicamento o te sientes mal, ve hoy a urgencias o llama al 123. No cambies ni suspendas la dosis por tu cuenta.";
 
 /** Rechaza frases que dañan la conversación o que no se deben decir. */
@@ -125,6 +126,8 @@ function fallback(input: ConversationInput): CompanionResult {
 export async function companionTurn(input: ConversationInput, deps: { ask: Ask; retrieve: (text: string, signal: AbortSignal) => Promise<Retrieval>; signal?: AbortSignal; timeoutMs?: number; libre?: boolean }): Promise<CompanionResult> {
   const last = input.mensajes.at(-1)?.content || "";
   if (explicitDanger(last)) return { ...dangerConversation(), caso: { ...emptyCase(), urgencia: "inmediata" }, mecanismo: null, avanzar: false, fuentes: [] };
+  // Una urgencia médica se responde al instante: no depende de la IA ni de ningún trámite.
+  if (medicalAlert(last)) return { respuesta: URGENT_REPLY, pregunta: null, propuestas: [], faltan: deps.libre ? [] : conversationMissing(input.confirmados, input.kind), peligro: false, caso: { ...emptyCase(), urgencia: "inmediata" }, mecanismo: null, avanzar: false, fuentes: [] };
   const users = input.mensajes.filter(m => m.role === "user").map(m => m.content);
   const story = users.join("\n");
   const result = await withinDeadline(async signal => {

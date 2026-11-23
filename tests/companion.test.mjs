@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { cleanCompanionReply, companionTurn, isCaseTurn, medicalAlert, needsMoreStory, nextOpenQuestion, shouldSearch } from '../src/lib/companion.ts';
+import { verifyAnswer } from '../src/lib/citation-verification.ts';
 import { checkOfficialSentence, officialNote, sentenceReferences } from '../src/lib/official-check.ts';
 
 const library = { topics: [], hits: [], sources: [], subtemas: [], reformulation: null, clarification: null };
@@ -22,6 +23,8 @@ test('urgencia médica sin esperar datos y sin alarma por una escasez futura', a
   assert.equal(medicalAlert('me queda insulina para cinco días'), false);
   const r = await companionTurn(input('Se me acabó la insulina y la EPS no me la da'), { libre: true, ask: async () => plan(), retrieve: async () => library });
   assert.match(r.respuesta, /urgencias o llama al 123/);
+  const noModel = await companionTurn(input('Tengo dolor en el pecho y la EPS no me atiende'), { libre: true, ask: async () => { throw Error('no debe llamarse'); }, retrieve: async () => library });
+  assert.match(noModel.respuesta, /Ve ya a urgencias/); assert.doesNotMatch(noModel.respuesta, /dificultó/);
   assert.match(r.respuesta, /No cambies ni suspendas/);
 });
 
@@ -69,4 +72,10 @@ test('la verificación oficial envía solo el número y distingue la página vac
   assert.equal(asked, 'https://www.corteconstitucional.gov.co/relatoria/2021/T-122-21.htm');
   assert.equal((await checkOfficialSentence({ type: 'T', number: '998', year: 2021, yy: '21' }, async () => new Response('<title>CORTE</title>'))).found, false);
   assert.equal(await officialNote('Sentencia T-777 de 2020', '', async () => { throw Error('sin red'); }), '');
+});
+
+test('un paso práctico citado a la Ruta no se pierde; una norma sin respaldo sí', async () => {
+  const hit = { title: 'Ruta RAIZIA — Salud', heading: '', docType: 'Guía', entity: 'RAIZIA', docDate: '2026', content: 'Texto sobre otro asunto distinto.' };
+  const out = await verifyAnswer('Primero presenta tu reclamo ante la EPS. [1]\nLa Ley 999 de 2020 te protege. [1]', [hit]);
+  assert.match(out, /Primero presenta tu reclamo/); assert.doesNotMatch(out, /Ley 999/);
 });

@@ -126,7 +126,11 @@ export async function verifyAnswer(text: string, hits: Hit[], ask?: Verification
   const verified = await verifyInStages(claims, hits, ask, signal);
   const legal: string[] = [], context: string[] = [];
   let heading = "", section = "", step = 0;
-  for (const claim of verified) {
+  for (const [index, checked] of verified.entries()) {
+    // Un paso práctico citado a una Ruta RAIZIA no se pierde por estar redactado con otras palabras.
+    const routeCitations = claims[index].citations.filter(n => isRoute(hits[n - 1]));
+    const routeStep = !checked.citations.length && routeCitations.length > 0 && !/\b(?:ley|decreto|sentencia|art[ií]culo|plazo|\d+)\b/i.test(checked.text.replace(/^\s*\d+[.)]\s*/, ""));
+    const claim = routeStep ? { ...checked, citations: routeCitations } : checked;
     const plain = plainHeading(claim.text);
     if (HEADINGS.includes(plain)) { heading = plain; section = plain; step = 0; continue; }
     // Un paso práctico sin norma, cifra ni plazo se conserva sin cita: quitarlo deja a la persona sin saber qué hacer.
