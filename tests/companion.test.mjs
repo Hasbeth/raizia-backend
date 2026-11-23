@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { sameQuestion, withoutQuestions, cleanCompanionReply, companionTurn, isCaseTurn, medicalAlert, needsMoreStory, nextOpenQuestion, shouldSearch } from '../src/lib/companion.ts';
+import { needsConsultationTutela, sameQuestion, withoutQuestions, cleanCompanionReply, companionTurn, isCaseTurn, medicalAlert, needsMoreStory, nextOpenQuestion, shouldSearch } from '../src/lib/companion.ts';
 import { verifyAnswer } from '../src/lib/citation-verification.ts';
 import { checkOfficialSentence, officialNote, sentenceReferences } from '../src/lib/official-check.ts';
 
@@ -95,4 +95,12 @@ test('la medida urgente reutiliza lo pedido y no repite datos confirmados', asyn
   const r = await companionTurn({ ...input(said), confirmados: { medidaProvisional: 'Sí', cuando: 'desde el 3 de octubre' } }, { ask: async () => plan({ propuestas: [{ campo: 'pretensiones', valor: said, cita_literal: said }] }), retrieve: async () => library });
   assert.equal(r.propuestas.find(p => p.campo === 'medida').valor, said);
   assert.ok(!r.faltan.includes('medida'));
+});
+
+test('obra ya iniciada sin consulta previa va a tutela con medida; proyecto futuro no', async () => {
+  const story = 'Soy autoridad del resguardo. Una empresa entró con maquinaria a abrir una vía en nuestro territorio. Nunca nos consultaron y ya empezaron a tumbar árboles.';
+  assert.equal(needsConsultationTutela(story), true);
+  assert.equal(needsConsultationTutela('En nuestro resguardo anunciaron un proyecto para el próximo año'), false);
+  const r = await companionTurn({ ...input(story, 'Nadie nos llamó', 'La obra sigue') }, { libre: true, ask: async () => plan({ respuesta: 'Podemos evaluar una solicitud. ¿Quieres prepararla?', mecanismo: 'consulta-previa' }), retrieve: async () => library });
+  assert.equal(r.mecanismo.id, 'tutela'); assert.equal(r.mecanismo.medidaProvisional, true); assert.match(r.respuesta, /medida provisional/);
 });

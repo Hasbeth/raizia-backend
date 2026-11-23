@@ -31,6 +31,7 @@ CONVERSACIÓN: normalmente de 1 a 3 frases cortas y como máximo UNA pregunta ú
 RAZONA SIN MOSTRARLO: hechos, urgencia, derechos en juego, responsable, pruebas y barreras territoriales o económicas. Guárdalo en los campos del JSON.
 RECOMIENDA: cuando ya sepas qué pasó, quién responde, qué intentó y qué tan urgente es, elige tú el mecanismo y dilo en palabras simples: "podemos evaluar…". Pregunta si quiere que le ayudes a prepararlo. Si hay riesgo para la salud o la vida y el camino es tutela, pon medida_provisional en true y explica que se le puede pedir al juez que la valore por la urgencia. Nunca la presentes como garantía. proteccion solo si la persona cuenta miedo, presión o amenazas.
 SALUD: si una EPS vulnera la salud, la atención médica va antes que cualquier trámite. En casos graves, la tutela y el reclamo ante Supersalud pueden hacerse al mismo tiempo; el reclamo no es requisito previo. La tutela va contra la EPS; no propongas a Supersalud como accionada salvo que la persona cuente una falla de esa entidad. Nunca digas que algo ya fue radicado si la persona no lo dijo.
+CONSULTA PREVIA: si una obra o proyecto ya empezó en territorio étnico sin consultar, el camino es tutela para exigir la consulta previa, con medida provisional para evaluar la suspensión. La solicitud de consulta previa sirve cuando el proyecto aún no inicia.
 SEGURIDAD: ante riesgo inmediato orienta primero a urgencias, al 123 o a un lugar seguro, sin esperar más datos y sin dramatizar. Nunca sugieras suspender, reducir ni cambiar una dosis.
 EXACTITUD: usa solo lo que dijo la persona y las FUENTES. No inventes hechos, entidades, plazos ni resultados. En respuesta no cites leyes, artículos ni sentencias; pon en citas los números de las fuentes que respaldan tu recomendación. Si algo es incierto, dilo.
 DATOS: no pidas cédula, teléfono, correo ni dirección; eso va después en un formulario privado.
@@ -131,6 +132,13 @@ export function sameQuestion(a: string, b: string): boolean {
 /** Los hechos no incluyen lo que la persona preguntó. */
 export const withoutQuestions = (text: string) => text.replace(/[^.!?\n]*\?/g, "").replace(/\s+/g, " ").trim();
 
+export const CONSULTATION_TUTELA_REPLY = "Es grave que la obra avance en su territorio sin consultarles. Podemos evaluar una tutela para exigir la consulta previa y pedirle al juez una medida provisional que valore frenar la obra. ¿Quieres que te ayude a prepararla?";
+/** Si la intervención ya empezó sin consulta, una solicitud sola no alcanza a proteger el territorio. */
+export function needsConsultationTutela(text: string): boolean {
+  const t = norm(text);
+  return /\b(?:resguardo|territorio|comunidad|cabildo|consejo comunitario|sitio sagrado)\b/.test(t) && /\b(?:sin consult\w*|nunca nos consultaron|no nos consultaron|nadie nos (?:llamo|consulto)|nadie las llamo)\b/.test(t) && /\b(?:maquinaria|ya empez\w*|empezaron|tumb\w*|entro con|abrir una via|obra avanza)\b/.test(t);
+}
+
 function fallback(input: ConversationInput): CompanionResult {
   const alert = medicalAlert(input.mensajes.at(-1)?.content || "");
   return { respuesta: `${alert ? `${MEDICAL_NOTICE} ` : ""}Se me dificultó responder en este momento. Lo que me contaste sigue aquí; escríbeme de nuevo en un momento.`, pregunta: null, propuestas: [], faltan: conversationMissing(input.confirmados, input.kind), peligro: false, caso: emptyCase(), mecanismo: null, avanzar: false, fuentes: [] };
@@ -163,14 +171,16 @@ export async function companionTurn(input: ConversationInput, deps: { ask: Ask; 
           // Nunca repite un turno anterior.
           if (reply && previousReplies.some(p => norm(p) === norm(reply as string))) reply = null;
         }
-      } catch (error) { if (signal.aborted) throw error; }
+      } catch (error) { if (signal.aborted) throw error; await new Promise(resolve => setTimeout(resolve, 1200)); }
     }
     if (!plan) return null;
     if (!reply && deps.libre) reply = nextOpenQuestion(previousReplies);
     const rawId = !early && typeof plan.mecanismo === "string" && ROUTE_IDS.includes(plan.mecanismo) ? plan.mecanismo : null;
-    const id = rawId === "proteccion" && !/miedo|amenaz|presion|intimid|hostig|violenc/.test(norm(story)) ? "acompanamiento" : rawId;
-    const urgencia = (["inmediata", "alta", "normal"] as const).find(u => u === plan!.urgencia) || "normal";
-    const medida = id === "tutela" && plan.medida_provisional === true && urgencia !== "normal";
+    const startedWork = needsConsultationTutela(story);
+    if (rawId === "consulta-previa" && startedWork) reply = CONSULTATION_TUTELA_REPLY;
+    const id = rawId === "consulta-previa" && startedWork ? "tutela" : rawId === "proteccion" && !/miedo|amenaz|presion|intimid|hostig|violenc/.test(norm(story)) ? "acompanamiento" : rawId;
+    const urgencia = startedWork && id === "tutela" && plan.urgencia === "normal" ? "alta" : (["inmediata", "alta", "normal"] as const).find(u => u === plan!.urgencia) || "normal";
+    const medida = id === "tutela" && (plan.medida_provisional === true || startedWork) && urgencia !== "normal";
     const mecanismo: Mechanism | null = id ? { id, title: DEFS[id].title, tool: DEFS[id].tool, medidaProvisional: medida, porque: typeof plan.por_que === "string" ? plan.por_que.trim().slice(0, 300) : "" } : null;
     const blamesRegulator = /(?:supersalud|superintendencia)[^.]{0,50}(?:no respond|no contest|neg[oó]|no hizo)/.test(norm(story));
     const propuestas: ConversationProposal[] = groundedProposals(Array.isArray(plan.propuestas) ? plan.propuestas : [], input).filter(p => p.campo !== "accionado" || blamesRegulator || !/supersalud|superintendencia/.test(norm(p.valor)));
