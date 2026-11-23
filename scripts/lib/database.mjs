@@ -8,16 +8,32 @@ export const dataDir = () => path.resolve(/* turbopackIgnore: true */ process.en
 
 export async function createDatabase({ url = process.env.DATABASE_URL, directory = process.env.RAIZIA_PGLITE_DIR || path.join(dataDir(), 'pglite'), memory = false } = {}) {
   if (url && !isLocal()) {
-    const sql = postgres(url, { prepare: false, max: 3, idle_timeout: 20, connect_timeout: 15,
+    const connect = () => postgres(url, { prepare: false, max: 3, idle_timeout: 20, connect_timeout: 15,
       types: { bigint: { to: 20, from: [20], serialize: String, parse: Number } } });
+    let sql = connect();
+    // En Vercel una función congelada puede dejar un socket colgado: sin este límite,
+    // las consultas siguientes esperan una conexión hasta agotar los 300 s de la función.
+    const limitMs = process.env.VERCEL ? Number(process.env.DB_QUERY_TIMEOUT_MS || 25_000) : 0;
+    const guarded = (start, ms = limitMs) => {
+      if (!ms) return start();
+      const owner = sql;
+      let timer;
+      const expired = new Promise((_, reject) => {
+        timer = setTimeout(() => {
+          if (owner === sql) { sql = connect(); owner.end({ timeout: 0 }).catch(() => {}); }
+          reject(new Error('db_timeout'));
+        }, ms);
+      });
+      return Promise.race([start(), expired]).finally(() => clearTimeout(timer));
+    };
     const wrap = client => ({
-      query: async (statement, params = []) => Array.from(await client.unsafe(statement, params)),
-      exec: async statement => { await client.unsafe(statement).simple(); },
-      transaction: fn => client.begin(t => fn(wrap(t))),
+      query: async (statement, params = []) => Array.from(await guarded(() => client().unsafe(statement, params))),
+      exec: async statement => { await guarded(() => client().unsafe(statement).simple()); },
+      transaction: fn => guarded(() => client().begin(t => fn(wrap(() => t))), limitMs * 4),
     });
     // Producción: conexión diferida SIN DDL. applySchema es exclusivo del cargador/
     // mantenimiento explícito; GIN/HNSW y DROP INDEX no pertenecen al arranque frío.
-    return { ...wrap(sql), kind: 'postgres', close: () => sql.end({ timeout: 5 }) };
+    return { ...wrap(() => sql), kind: 'postgres', close: () => sql.end({ timeout: 5 }) };
   }
   if ((process.env.VERCEL || process.env.NODE_ENV === 'production') && !isLocal()) throw new Error('Configura DATABASE_URL en producción: PGlite es solo local.');
   const { PGlite } = await import(/* webpackIgnore: true */ /* turbopackIgnore: true */ '@electric-sql/pglite');
