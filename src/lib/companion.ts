@@ -3,7 +3,7 @@ import { TOOLS } from "./tools-config";
 import { explicitDanger } from "./emergency";
 import { hasProhibited, normalizeEvidence, validConversationQuestion } from "./conversation-grounding";
 import { withinDeadline } from "./citation-verification";
-import { conversationFields } from "./conversation-catalog";
+import { conversationFields, conversationQuestions } from "./conversation-catalog";
 import { CONVERSATION_FIELDS, conversationMissing, dangerConversation, groundedProposals, type ConversationInput, type ConversationProposal, type ConversationResult } from "./tool-conversation";
 import type { Retrieval } from "./rag";
 
@@ -75,6 +75,8 @@ export function cleanCompanionReply(raw: unknown, story: string): string | null 
   if (/(?:crees|consideras|sientes|piensas) que[^?]*(?:derechos?|vulner|peligro|riesgo)/.test(t)) return null;
   if (/\b(?:insulina|medicamento|medicina)\b/.test(norm(story)) && /(?:hay|corre|corres|existe)[^?]*(?:peligro|riesgo)[^?]*\?/.test(t)) return null;
   if (/\b(?:vas a ganar|ganaras|te van a conceder|el juez ordenara|seguro te)\b/.test(t)) return null;
+  // Los datos de identidad y contacto solo se piden en su formulario privado.
+  if (/\b(?:necesito|dame|dime|indicame|compart\w*|facilit\w*|escribe|podrias decirme)\b[^.?!]*\b(?:nombre completo|tu nombre|cedula|numero de documento|documento de identidad|telefono|celular|correo|direccion)\b/.test(t)) return null;
   if (mark >= 0) { const start = text.lastIndexOf("¿"); if (start >= 0 && !validConversationQuestion(text.slice(start))) return null; }
   return text;
 }
@@ -131,7 +133,7 @@ export async function companionTurn(input: ConversationInput, deps: { ask: Ask; 
         }
       } catch (error) { if (signal.aborted) throw error; }
     }
-    if (!plan || !reply) return null;
+    if (!plan || (!reply && deps.libre)) return null;
     const rawId = !early && typeof plan.mecanismo === "string" && ROUTE_IDS.includes(plan.mecanismo) ? plan.mecanismo : null;
     const id = rawId === "proteccion" && !/miedo|amenaz|presion|intimid|hostig|violenc/.test(norm(story)) ? "acompanamiento" : rawId;
     const urgencia = (["inmediata", "alta", "normal"] as const).find(u => u === plan!.urgencia) || "normal";
@@ -142,9 +144,15 @@ export async function companionTurn(input: ConversationInput, deps: { ask: Ask; 
     if (!deps.libre && !input.confirmados.hechos && !propuestas.some(p => p.campo === "hechos") && wordCount(longest) >= 6 && conversationFields(input.kind).some(f => f.name === "hechos")) propuestas.unshift({ campo: "hechos", valor: longest.trim(), cita_literal: longest.trim() });
     if (!deps.libre && input.kind === "tutela" && medida && !input.confirmados.medidaProvisional) propuestas.push({ campo: "medidaProvisional", valor: "Sí", cita_literal: longest.trim() });
     const tentative = { ...input.confirmados, ...Object.fromEntries(propuestas.map(p => [p.campo, p.valor])) };
-    const alert = medicalAlert(last) && !/urgencias|123/.test(norm(reply));
+    const pending = deps.libre ? [] : conversationMissing(tentative, input.kind);
+    // Si la redacción falla o da por terminado lo que aún falta, se pregunta el siguiente dato pendiente.
+    if (!deps.libre && (!reply || (pending.length && /\b(?:ya tengo|tengo lo (?:principal|necesario)|datos privados)\b/.test(norm(reply))))) {
+      reply = pending.length ? conversationQuestions(input.kind, tentative)[pending[0]] : "Ya tenemos lo principal. Ahora te pido tus datos en un formulario privado y te muestro el borrador para revisarlo.";
+    }
+    const finalReply = reply as string;
+    const alert = medicalAlert(last) && !/urgencias|123/.test(norm(finalReply));
     const cited = new Set(Array.isArray(plan.citas) ? plan.citas.filter((n): n is number => Number.isInteger(n)) : []);
-    return { respuesta: `${alert ? `${MEDICAL_NOTICE} ` : ""}${reply}`, pregunta: null, propuestas, faltan: deps.libre ? [] : conversationMissing(tentative, input.kind), peligro: false,
+    return { respuesta: `${alert ? `${MEDICAL_NOTICE} ` : ""}${finalReply}`, pregunta: null, propuestas, faltan: pending, peligro: false,
       caso: { hechos: texts(plan.hechos, 12), urgencia, derechos: texts(plan.derechos, 8), responsable: typeof plan.responsable === "string" ? plan.responsable.slice(0, 160) : "", pruebas: texts(plan.pruebas, 8), barreras: texts(plan.barreras, 6) },
       mecanismo, avanzar: !!mecanismo && acceptedOffer(last, [...input.mensajes].reverse().find(m => m.role === "assistant")?.content || ""), fuentes: (library?.sources || []).filter(s => s.n <= hits.length && cited.has(s.n)) } satisfies CompanionResult;
   }, deps.timeoutMs ?? 24_000, deps.signal);

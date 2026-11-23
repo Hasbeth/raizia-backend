@@ -13,6 +13,7 @@ test('no pregunta lo obvio, no promete y deja una sola pregunta', () => {
   assert.equal(cleanCompanionReply('Lo siento. ¿Hay peligro para tu salud si esperas?', story), null);
   assert.equal(cleanCompanionReply('Tranquilo, vas a ganar la tutela.', story), null);
   assert.equal(cleanCompanionReply('Por ahora reduce la dosis de insulina.', story), null);
+  assert.equal(cleanCompanionReply('Necesito tu nombre completo y número de documento.', story), null);
   assert.equal(cleanCompanionReply('Eso es delicado. ¿Cuántos días te quedan? ¿Y quién te atendió?', story), 'Eso es delicado. ¿Cuántos días te quedan?');
 });
 
