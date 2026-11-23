@@ -142,6 +142,7 @@ test('Ruta acota cuerpo, turnos y longitud; aplica checkChatLimit sin llamar Gem
   let calls = 0, limited = 0;
   const { POST } = moduleHarness('../../src/rutas/tools/conversar/route.ts', {
     '@/lib/tool-conversation': conversation, '@/lib/tool-assistance': assistance, '@/lib/emergency': emergency,
+    '@/lib/companion': { companionTurn: (value, options) => conversation.converse(value, options) },
     '@/lib/rag': { askGeminiJSON: async () => { calls++; return output(); } },
     '@/lib/rate-limit': { CHAT_LIMIT_MESSAGE: 'LÍMITE FICTICIO', checkChatLimit: async () => { limited++; return { allowed: false, retryAfter: 60 }; } },
   });

@@ -15,7 +15,7 @@ export function routeHarness({ documents = {}, auth = {}, rag = {}, tools = {}, 
       return target[key];
     },
   });
-  const adapters = { "@/lib/identity": identity, "@/lib/documents": strict(documents), "@/lib/auth": strict(auth), "@/lib/rag": strict(rag), "@/lib/tools-config": strict(tools), "@/lib/rate-limit": strict(rateLimit) };
+  const adapters = { "@/lib/identity": identity, "@/lib/documents": strict(documents), "@/lib/auth": strict(auth), "@/lib/rag": strict(rag), "@/lib/tools-config": strict(tools), "@/lib/rate-limit": strict(rateLimit), "@/lib/companion": { isCaseTurn: () => false, companionTurn: async () => { throw new Error("no esperado"); } }, "@/lib/official-check": { officialNote: async () => "" } };
   return (name) => {
     const path = fileURLToPath(new URL(`${name}/route.ts`, root));
     const code = ts.transpileModule(readFileSync(path, "utf8"), {

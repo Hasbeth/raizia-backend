@@ -71,6 +71,22 @@ const fitsAck = (ack: string, last: string) => ack.includes("corregir") ? /\b(?:
 export function conversationMissing(data: ToolData, kind = "tutela"): string[] {
   return Object.keys(conversationQuestions(kind, data)).filter(k => (!["medida", "razonMedida"].includes(k) || data.medidaProvisional === "Sí") && !present(data[k]));
 }
+/** Solo conserva propuestas sustentadas en una cita literal de la persona. */
+export function groundedProposals(list: unknown[], input: ConversationInput): ConversationProposal[] {
+  const fields = allowed(input.kind);
+  const propuestas: ConversationProposal[] = [];
+  for (const p of list.slice(0, 16)) {
+    if (!object(p) || typeof p.campo !== "string" || typeof p.valor !== "string" || typeof p.cita_literal !== "string") continue;
+    const field = fields.find(f => f.name === p.campo);
+    const quote = p.cita_literal;
+    if (!field || !p.valor.trim() || !quote.trim() || quote.length > CONVERSATION_LIMITS.message || p.valor.length > Math.min(CONVERSATION_LIMITS.message, quote.length + 20) || hasProhibited(p.valor) || hasProhibited(quote) || !input.mensajes.some(m => m.role === "user" && containsQuote(m.content, quote))) continue;
+    const riskContext = ["peligro", "medidaProvisional"].includes(input.contexto || "") || /peligro|riesgo|urgente/i.test(input.mensajes.filter(m => m.role === "assistant").at(-1)?.content || "");
+    const option = ["Sí", "No"].includes(p.valor) && ["peligro", "medidaProvisional"].includes(p.campo);
+    if (field.options && !field.options.includes(p.valor) || !(option ? supportedOption(p.valor, quote, riskContext) : groundedText(p.valor, quote))) continue;
+    if (!propuestas.some(v => v.campo === p.campo && v.valor === p.valor) && input.confirmados[p.campo] !== p.valor) propuestas.push({ campo: p.campo, valor: p.valor.trim(), cita_literal: quote.trim() });
+  }
+  return propuestas;
+}
 export function validateConversationJSON(text: string, input: ConversationInput): ConversationResult | null {
   if (explicitDanger(input.mensajes.at(-1)?.content || "")) return dangerConversation();
   let raw: unknown;
@@ -81,18 +97,7 @@ export function validateConversationJSON(text: string, input: ConversationInput)
   const lastSaid = story.split(/\n+/).filter(Boolean).at(-1) || "";
   const backup = acknowledgments.find(a => !previous.startsWith(a) && fitsAck(a, lastSaid)) || "Gracias por agregar ese detalle.";
   const respuesta = !previous.startsWith(raw.respuesta) && ((acknowledgments.includes(raw.respuesta) && fitsAck(raw.respuesta, lastSaid)) || validAcknowledgment(raw.respuesta, story)) ? raw.respuesta.trim() : backup;
-  const fields = allowed(input.kind);
-  const propuestas: ConversationProposal[] = [];
-  for (const p of raw.propuestas.slice(0, 16)) {
-    if (!object(p) || typeof p.campo !== "string" || typeof p.valor !== "string" || typeof p.cita_literal !== "string") continue;
-    const field = fields.find(f => f.name === p.campo);
-    const quote = p.cita_literal;
-    if (!field || !p.valor.trim() || !quote.trim() || quote.length > CONVERSATION_LIMITS.message || p.valor.length > Math.min(CONVERSATION_LIMITS.message, quote.length + 20) || hasProhibited(p.valor) || hasProhibited(quote) || !input.mensajes.some(m => m.role === "user" && containsQuote(m.content, quote))) continue;
-    const riskContext = ["peligro", "medidaProvisional"].includes(input.contexto || "") || /peligro|riesgo|urgente/i.test(input.mensajes.filter(m => m.role === "assistant").at(-1)?.content || "");
-    const option = ["Sí", "No"].includes(p.valor) && ["peligro", "medidaProvisional"].includes(p.campo);
-    if (field.options && !field.options.includes(p.valor) || !(option ? supportedOption(p.valor, quote, riskContext) : groundedText(p.valor, quote))) continue;
-    if (!propuestas.some(v => v.campo === p.campo && v.valor === p.valor) && input.confirmados[p.campo] !== p.valor) propuestas.push({ campo: p.campo, valor: p.valor.trim(), cita_literal: quote.trim() });
-  }
+  const propuestas = groundedProposals(raw.propuestas, input);
   // Solo una vista tentativa para elegir la próxima pregunta; nunca muta confirmados.
   const tentative = { ...input.confirmados, ...Object.fromEntries(propuestas.map(p => [p.campo, p.valor])) };
   const faltan = conversationMissing(tentative, input.kind);

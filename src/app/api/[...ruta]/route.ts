@@ -18,6 +18,7 @@ import * as r13 from "@/rutas/admin/uploads/route";
 import * as r21 from "@/rutas/tools/organizar/route";
 import * as r22 from "@/rutas/tools/orientar/route";
 import * as conversar from "@/rutas/tools/conversar/route";
+import * as acompanar from "@/rutas/tools/acompanar/route";
 import * as r16 from "@/rutas/documents/[id]/route";
 import * as r23 from "@/rutas/tools/[kind]/route";
 import * as r14 from "@/rutas/chat/route";
@@ -51,6 +52,7 @@ const routes: Entry[] = [
   { segments: ["tools","organizar"], module: r21 },
   { segments: ["tools","orientar"], module: r22 },
   { segments: ["tools","conversar"], module: conversar },
+  { segments: ["tools","acompanar"], module: acompanar },
   { segments: ["documents","[id]"], module: r16 },
   { segments: ["tools","[kind]"], module: r23 },
   { segments: ["chat"], module: r14 },

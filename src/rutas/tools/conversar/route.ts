@@ -2,7 +2,8 @@ import { assistTool, ASSISTANCE_ACTIONS, type AssistanceAction } from "@/lib/too
 import { explicitDanger } from "@/lib/emergency";
 import { askGeminiJSON, retrieve } from "@/lib/rag";
 import { checkChatLimit, CHAT_LIMIT_MESSAGE } from "@/lib/rate-limit";
-import { CONVERSATION_LIMITS, converse, fallbackConversation, parseConversationInput } from "@/lib/tool-conversation";
+import { CONVERSATION_LIMITS, fallbackConversation, parseConversationInput } from "@/lib/tool-conversation";
+import { companionTurn } from "@/lib/companion";
 export const dynamic = "force-dynamic";
 const headers = { "Cache-Control": "no-store" };
 
@@ -35,5 +36,5 @@ export async function POST(req: Request) {
   const limit = await checkChatLimit(req);
   if (!limit.allowed) return Response.json({ ...fallbackConversation(input), respuesta: CHAT_LIMIT_MESSAGE + " Puedes continuar paso a paso; tu texto se conserva." }, { status: 429, headers: { ...headers, "Retry-After": String(limit.retryAfter) } });
   if (action) return Response.json(await assistTool(input, action, { ask: askGeminiJSON, retrieve: (text, signal) => retrieve(text, "", undefined, [], { signal, reformulate: async () => null }), signal: req.signal }), { headers });
-  return Response.json(await converse(input, { ask: askGeminiJSON, signal: req.signal }), { headers });
+  return Response.json(await companionTurn(input, { ask: askGeminiJSON, signal: req.signal, retrieve: (text, signal) => retrieve(text, "", undefined, [], { signal, reformulate: async () => null }) }), { headers });
 }

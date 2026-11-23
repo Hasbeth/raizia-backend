@@ -111,8 +111,8 @@ export async function verifyClaims(claims: Claim[], hits: Hit[], ask?: Verificat
   });
 }
 export function splitClaims(text: string): Claim[] {
-  return text.replace(/([.!?])\s+(\[[\d,\s]+\])/g, "$2$1").split(/\n+|(?<=[.!?])\s+(?=[A-ZÁÉÍÓÚ¿])/)
-    .map(s => s.trim()).filter(Boolean).map(s => ({ text: s.replace(/\[(?:fuente\s*)?[\d,\s]+\]/gi, "").replace(/(?:\s*,)+\s*(?=[.;:!?]|$)/g, "").replace(/\s+([.;:!?])/g, "$1").trim(),
+  return text.replace(/"[^"\n]{1,400}"|“[^”\n]{1,400}”/g, quote => quote.replace(/([.!?])\s+/g, "$1\u0001")).replace(/([.!?])\s+(\[[\d,\s]+\])/g, "$2$1").split(/\n+|(?<=[.!?])\s+(?=[A-ZÁÉÍÓÚ¿])/)
+    .map(s => s.replace(/\u0001/g, " ").trim()).filter(Boolean).map(s => ({ text: s.replace(/\[(?:fuente\s*)?[\d,\s]+\]/gi, "").replace(/(?:\s*,)+\s*(?=[.;:!?]|$)/g, "").replace(/\s+([.;:!?])/g, "$1").trim(),
       citations: [...s.matchAll(/\[(?:fuente\s*)?([\d,\s]+)\]/gi)].flatMap(m => m[1].split(",").map(n => Number(n.trim()))) }));
 }
 export function renderClaim(claim: Claim, hits: Hit[]) {

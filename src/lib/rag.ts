@@ -418,7 +418,7 @@ Reglas obligatorias:
 11. No califiques un hecho como delito. El motivo de discriminación importa: si ciudad o región de origen no está expresamente en la norma recuperada, dilo y explica que requiere valoración, sin afirmar que encaja ni negar otras vías.
 ${IDENTITY_RULES}
 ${CONTEXT_RULES}
-Las fuentes Ruta RAIZIA orientan Qué hacer: en qué orden, a dónde acudir, qué llevar, qué decir y qué hacer si no responden. Aplica sus pasos a lo contado, con citas, sin hacer una lista de normas. Las obligaciones legales requieren norma o sentencia.`;
+Las fuentes Ruta RAIZIA orientan Qué hacer: en qué orden, a dónde acudir, qué llevar, qué decir y qué hacer si no responden. Aplica sus pasos a lo contado, con citas, sin hacer una lista de normas. Las obligaciones legales requieren norma o sentencia. Si hay una Ruta RAIZIA aplicable, empieza por lo que la persona puede hacer hoy y nombra siempre a qué entidad acudir y qué hacer si no responden. Si la ruta tiene un apartado para su situación exacta, por ejemplo un negocio, una escuela o un acompañante, úsalo completo con sus condiciones. No abras explicando funciones de funcionarios.`;
 
 export type ConversationKind = "charla" | "sin_fuentes";
 
@@ -487,7 +487,7 @@ function describeAsker(profile?: AskerProfile): string {
 export function answerScope(message: string, reformulation?: Reformulation | null): "puntual" | "completa" {
   if (reformulation?.tipo === "seguimiento") return "puntual";
   if (reformulation?.alcance) return reformulation.alcance;
-  return /orientacion completa|orientame|que (?:puedo|debo) hacer|pasos (?:a seguir|para resolver)/i.test(normalizeEvidence(message)) ? "completa" : "puntual";
+  return /orientacion completa|orientame|que (?:puedo|podemos|debo|debemos) hacer|que hago|que hacemos|a donde|a quien acudo|como (?:pido|denuncio|reclamo)|pasos (?:a seguir|para resolver)/i.test(normalizeEvidence(message)) ? "completa" : "puntual";
 }
 
 export function buildMessages(
@@ -500,7 +500,7 @@ export function buildMessages(
   const context = hits
     .map((h, i) => {
       const where = [h.title, h.heading].filter(Boolean).join(" — ");
-      return `[${i + 1}] ${where} | ${sourceKind(h)} | ${h.docType} | ${h.entity} | ${h.docDate || "sin fecha"}\n${h.articleContext ? h.content : excerpt(h.content, [message, ...(reformulation?.subtemas || [])].join(" "), 1400)}`;
+      return `[${i + 1}] ${where} | ${sourceKind(h)} | ${h.docType} | ${h.entity} | ${h.docDate || "sin fecha"}\n${h.articleContext || /^Ruta RAIZIA/.test(h.title) ? h.content : excerpt(h.content, [message, ...(reformulation?.subtemas || [])].join(" "), 1400)}`;
     })
     .join("\n\n");
   const past = history.slice(-4).map((m) => ({

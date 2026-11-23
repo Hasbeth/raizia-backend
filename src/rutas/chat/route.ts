@@ -3,6 +3,10 @@ import { suggestTool } from "@/lib/tools-config";
 import { generateAnswer, isSmallTalk, ollamaStatus, retrieve, smallTalkReply } from "@/lib/rag";
 import { checkChatLimit, CHAT_LIMIT_MESSAGE } from "@/lib/rate-limit";
 import { resolveIdentity } from "@/lib/identity";
+import { askGeminiJSON } from "@/lib/rag";
+import { companionTurn, isCaseTurn } from "@/lib/companion";
+import { officialNote } from "@/lib/official-check";
+import { TOOLS } from "@/lib/tools-config";
 export const runtime = "nodejs";
 export const maxDuration = 300;
 export const dynamic = "force-dynamic";
@@ -44,6 +48,20 @@ export async function POST(req: Request) {
             let subtemas: string[] = [];
             const send = (e: ChatEvent) => controller.enqueue(encoder.encode(JSON.stringify(e.type === "meta" ? { ...e, subtemas, identityQuestion } : e) + "\n"));
             try {
+                // Un relato todavía incompleto se conversa con la misma lógica de las herramientas.
+                if (!smallTalk && isCaseTurn(message, history)) {
+                    const mensajes = [...history.map(m => ({ role: m.role, content: m.content.slice(0, 2000) })), { role: "user" as const, content: message }];
+                    while (mensajes.length > 16 || mensajes[0]?.role === "assistant") mensajes.shift();
+                    const turn = await companionTurn({ kind: "tutela", mensajes, confirmados: {}, preguntados: {} }, { libre: true, ask: askGeminiJSON, signal: req.signal,
+                        retrieve: (text, signal) => retrieve(text, "", profile, [], { signal, reformulate: async () => null }) });
+                    const slug = turn.mecanismo?.tool?.slug;
+                    const offered = slug ? Object.values(TOOLS).find(t => t.slug === slug) : undefined;
+                    identityQuestion = undefined;
+                    send({ type: "meta", mode: "conversacion", topics: [], sources: turn.fuentes, tool: offered ? { slug: offered.slug, name: offered.name } : undefined });
+                    send({ type: "token", text: turn.respuesta });
+                    send({ type: "done" });
+                    return;
+                }
                 // La reformulación clasifica antes de consultar la biblioteca.
                 const retrieval = smallTalk
                     ? { topics: [], hits: [], sources: [], subtemas: [], reformulation: null, clarification: null, reply: smallTalkReply(message, history) }
@@ -117,6 +135,9 @@ export async function POST(req: Request) {
                     for await (const text of generateAnswer(status.model, message, hits, history, req.signal, profile, undefined, reformulation)) {
                         send({ type: "token", text });
                     }
+                    // Solo si nombra una sentencia ausente de lo recuperado: se consulta su número, nunca el relato.
+                    const note = await officialNote(message, hits.map(h => `${h.title} ${h.heading}`).join(" "));
+                    if (note) send({ type: "token", text: `\n\n${note}` });
                 }
                 catch {
                     if (req.signal.aborted)
