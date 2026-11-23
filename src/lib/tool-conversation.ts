@@ -65,6 +65,9 @@ Devuelve exclusivamente el JSON del esquema. Propuestas son borradores, jamás d
 faltan ordena las claves pendientes por importancia. campoPregunta identifica el campo de tu pregunta, que debe ser el primero pendiente con menos de dos preguntas. El catálogo orienta el tema, no obliga a copiar su redacción. pregunta contiene un solo signo ? o es null si no corresponde insistir. respuesta reconoce lo contado de forma natural, sin formato obligatorio. No repitas el reconocimiento del turno anterior.`;
 
 const acknowledgments = ["Gracias por contarme lo que pasó.", "Entiendo que quieres corregir lo anterior.", "Está bien si no lo sabes.", "Gracias por agregar ese detalle."];
+// Las frases de respaldo solo se usan cuando corresponden a lo que la persona acaba de decir.
+const fitsAck = (ack: string, last: string) => ack.includes("corregir") ? /\b(?:corrij\w*|correg\w*|me equivoqu\w*|en realidad|mejor dicho|no fue as[ií])\b/i.test(last)
+  : ack.includes("no lo sabes") ? /\b(?:no s[eé]|no recuerdo|no me acuerdo|ni idea)\b/i.test(last) : true;
 export function conversationMissing(data: ToolData, kind = "tutela"): string[] {
   return Object.keys(conversationQuestions(kind, data)).filter(k => (!["medida", "razonMedida"].includes(k) || data.medidaProvisional === "Sí") && !present(data[k]));
 }
@@ -75,8 +78,9 @@ export function validateConversationJSON(text: string, input: ConversationInput)
   if (!object(raw) || typeof raw.respuesta !== "string" || !Object.hasOwn(raw, "pregunta") || !Array.isArray(raw.propuestas)) return null;
   const story = input.mensajes.filter(m => m.role === "user").map(m => m.content).join("\n");
   const previous = input.mensajes.filter(m => m.role === "assistant").at(-1)?.content || "";
-  const backup = acknowledgments.find(a => !previous.startsWith(a)) || acknowledgments[0];
-  const respuesta = !previous.startsWith(raw.respuesta) && (acknowledgments.includes(raw.respuesta) || validAcknowledgment(raw.respuesta, story)) ? raw.respuesta.trim() : backup;
+  const lastSaid = story.split(/\n+/).filter(Boolean).at(-1) || "";
+  const backup = acknowledgments.find(a => !previous.startsWith(a) && fitsAck(a, lastSaid)) || "Gracias por agregar ese detalle.";
+  const respuesta = !previous.startsWith(raw.respuesta) && ((acknowledgments.includes(raw.respuesta) && fitsAck(raw.respuesta, lastSaid)) || validAcknowledgment(raw.respuesta, story)) ? raw.respuesta.trim() : backup;
   const fields = allowed(input.kind);
   const propuestas: ConversationProposal[] = [];
   for (const p of raw.propuestas.slice(0, 16)) {
