@@ -152,7 +152,7 @@ export async function companionTurn(input: ConversationInput, deps: { ask: Ask; 
   const users = input.mensajes.filter(m => m.role === "user").map(m => m.content);
   const story = users.join("\n");
   const result = await withinDeadline(async signal => {
-    const library = shouldSearch(users) ? await deps.retrieve(story.slice(-900), signal).catch(() => null) : null;
+    const library = shouldSearch(users) ? await withinDeadline(search => deps.retrieve(story.slice(-900), search), 10_000, signal) : null;
     const hits = library?.hits.slice(0, 4) || [];
     const faltan = deps.libre ? [] : conversationMissing(input.confirmados, input.kind);
     const data = JSON.stringify({ herramienta: deps.libre ? null : TOOLS[input.kind].name, faltan, confirmados: deps.libre ? {} : input.confirmados, campos: conversationFields(input.kind).map(f => f.name), mensajes: input.mensajes,
